@@ -1,5 +1,5 @@
 /* Trade Flow dashboard — vanilla JS, hand-rolled SVG */
-const state = { mode: "day", end: null, symbol: null, tab: "market", traderSort: "active" };
+const state = { mode: "day", end: null, symbol: null, trader: null, tab: "market", traderSort: "active" };
 let DATA = null;
 
 const ACTION_COLORS = {
@@ -25,7 +25,7 @@ function windowDays() {
   }
   return days;
 }
-function inRange(t) { return windowDays().includes(t.day) && (!state.symbol || t.symbol === state.symbol); }
+function inRange(t) { return windowDays().includes(t.day) && (!state.symbol || t.symbol === state.symbol) && (!state.trader || t.trader === state.trader); }
 function rangeTrades() { return DATA.trades.filter(inRange); }
 function fmtDay(d) {
   return new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -139,10 +139,13 @@ function renderTape(trades) {
   }
   el.innerHTML = html;
   const chip = $("tapeFilter");
-  if (state.symbol) {
+  const bits = [];
+  if (state.trader) bits.push(`<b>${esc(state.trader)}</b>`);
+  if (state.symbol) bits.push(`<b>${esc(state.symbol)}</b>`);
+  if (bits.length) {
     chip.classList.remove("hidden");
-    chip.innerHTML = `Filtered: <b>${esc(state.symbol)}</b> ✕`;
-    chip.onclick = () => { state.symbol = null; render(); };
+    chip.innerHTML = `Filtered: ${bits.join(" · ")} ✕`;
+    chip.onclick = () => { state.symbol = null; state.trader = null; render(); };
   } else chip.classList.add("hidden");
 }
 
@@ -288,7 +291,7 @@ function renderTraders() {
     const instMix = Object.entries(r.inst).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const avgRt = r.rt.length ? r.rt.reduce((a, b) => a + b, 0) / r.rt.length : null;
     const small = r.scored > 0 && r.scored < 5;
-    return `<div class="tcard">
+    return `<div class="tcard" data-trader="${esc(r.name)}">
       <div class="tc-head"><b>${esc(r.name)}</b>
         <span class="tc-meta">${r.n} actions · ${r.days.size} days</span></div>
       <div class="tc-record">
@@ -304,6 +307,14 @@ function renderTraders() {
       ${r.tgt ? `<div class="tc-row"><span class="tc-k">Targets</span> ${r.tgtHit}/${r.tgt} hit</div>` : ""}
     </div>`;
   }).join("");
+  document.querySelectorAll(".tcard").forEach(el => {
+    el.onclick = () => {
+      state.trader = el.dataset.trader;
+      state.tab = "market";
+      render();
+      window.scrollTo(0, 0);
+    };
+  });
 }
 
 /* ---------- shell ---------- */
@@ -396,7 +407,7 @@ async function init() {
   });
   $("generated").textContent = "data through " + fmtDay(DATA.day_range[1]) + (DATA.live ? " · live" : "");
   document.querySelectorAll("#rangeSeg button").forEach(b =>
-    b.onclick = () => { state.mode = b.dataset.mode; state.symbol = null; render(); });
+    b.onclick = () => { state.mode = b.dataset.mode; state.symbol = null; state.trader = null; render(); });
   document.querySelectorAll("#tabSeg button").forEach(b =>
     b.onclick = () => { state.tab = b.dataset.tab; render(); });
   document.querySelectorAll("#traderSortSeg button").forEach(b =>
