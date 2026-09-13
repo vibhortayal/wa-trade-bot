@@ -62,7 +62,8 @@
     <div><dt>Crowd clusters</dt><dd>Symbols that 3 or more members all traded — where the group agrees.</dd></div>
     <div><dt>Options lens</dt><dd>How far out the options bets expire: this month, 1–6 months, or LEAPS (6+ months).</dd></div>
     <div><dt>Plans watchlist</dt><dd>Conditional orders people announced, e.g. “buy NVDA if it breaks 180”.</dd></div>
-    <div><dt>Traders tab</dt><dd>One card per anonymous member, over all time: how active they are,
+    <div><dt>Traders tab</dt><dd>One card per anonymous member, in the selected day / week / month:
+      how active they are,
       their favorite symbols, and their record (✓ favorable · ✗ unfavorable · – flat, from the
       5-trading-day outcomes). Cards with fewer than 5 scored trades are flagged
       <b>small sample</b> — don't read too much into them. Round trips show the actual
@@ -132,7 +133,7 @@
   <div id="tradersView" class="hidden">
     <section class="panel">
       <div class="panel-head">
-        <h2>Traders <span class="tip" data-tip="One card per anonymous member, over all time. The record counts only scored trades — 5 trading days after each action. A small sample is flagged so a lucky streak doesn't look like a track record.">i</span> <span class="sub">all time · anonymous</span></h2>
+        <h2>Traders <span class="tip" data-tip="One card per anonymous member, in the selected time range. The record counts only scored trades — 5 trading days after each action. A small sample is flagged so a lucky streak doesn't look like a track record.">i</span> <span class="sub" id="tradersRange"></span></h2>
         <div class="seg" id="traderSortSeg">
           <button data-sort="active" class="active">Most active</button>
           <button data-sort="record">Best record</button>

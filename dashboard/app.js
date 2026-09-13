@@ -254,8 +254,10 @@ function renderHeatmap() {
 
 /* ---------- traders tab ---------- */
 function renderTraders() {
+  const inWin = new Set(windowDays());
+  $("tradersRange").textContent = `${fmtRange()} · anonymous`;
   const by = {};
-  DATA.trades.forEach(t => {
+  DATA.trades.filter(t => inWin.has(t.day)).forEach(t => {
     const d = by[t.trader] = by[t.trader] || {
       n: 0, days: new Set(), sym: {}, inst: {},
       fav: 0, unf: 0, flat: 0, rt: [], tgtHit: 0, tgt: 0,
@@ -277,6 +279,10 @@ function renderTraders() {
   rows.sort(state.traderSort === "record"
     ? (a, b) => rate(b) - rate(a) || b.scored - a.scored
     : (a, b) => b.n - a.n);
+  if (!rows.length) {
+    $("traderCards").innerHTML = `<div class="empty">No trade actions in this range.</div>`;
+    return;
+  }
   $("traderCards").innerHTML = rows.map(r => {
     const topSym = Object.entries(r.sym).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const instMix = Object.entries(r.inst).sort((a, b) => b[1] - a[1]).slice(0, 3);
@@ -306,14 +312,14 @@ function render() {
     b.classList.toggle("active", b.dataset.tab === state.tab));
   $("marketView").classList.toggle("hidden", state.tab !== "market");
   $("tradersView").classList.toggle("hidden", state.tab !== "traders");
-  if (state.tab === "traders") { renderTraders(); return; }
-  const trades = rangeTrades();
   $("dateLabel").textContent = fmtRange();
   const days = DATA.day_range;
   $("prevBtn").disabled = windowDays()[0] <= days[0];
   $("nextBtn").disabled = state.end >= days[1];
   document.querySelectorAll("#rangeSeg button").forEach(b =>
     b.classList.toggle("active", b.dataset.mode === state.mode));
+  if (state.tab === "traders") { renderTraders(); return; }
+  const trades = rangeTrades();
   renderDigest(trades);
   renderTape(trades);
   renderSide(trades);
