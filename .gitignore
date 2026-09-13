@@ -8,3 +8,8 @@ logs/
 
 # Deps
 node_modules/
+
+# local caches & logs
+.wwebjs_cache/
+__pycache__/
+*.log
