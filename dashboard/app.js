@@ -43,7 +43,10 @@ function setPreview(kind, value) {
   render();
   if (!was) {
     const el = $("sliceSummary");
-    if (el && !el.classList.contains("hidden")) el.scrollIntoView({ block: "nearest" });
+    if (el && !el.classList.contains("hidden")) {
+      el.scrollIntoView({ block: "nearest" });
+      el.classList.remove("pulse"); void el.offsetWidth; el.classList.add("pulse");
+    }
   }
 }
 function previewTrades() {
