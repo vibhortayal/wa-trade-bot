@@ -103,18 +103,18 @@ function outcomeBadge(t) {
   if (!o || !o.scored) return "";
   if (o.kind === "plan" && o.target != null) {
     if (o.tgt_hit)
-      return `<span class="tip oc oc-hit" data-tip="The price hit the $${o.target} target on ${o.target_hit_day}.">✓ target hit</span>`;
-    return `<span class="tip oc oc-pend" data-tip="Announced target: $${o.target}. Counts as hit if the price touches it within 14 days.">target $${o.target}</span>`;
+      return `<span class="tipx oc oc-hit" data-tip="The price hit the $${o.target} target on ${o.target_hit_day}.">✓ target hit</span>`;
+    return `<span class="tipx oc oc-pend" data-tip="Announced target: $${o.target}. Counts as hit if the price touches it within 14 days.">target $${o.target}</span>`;
   }
   const rt = o.roundtrip ? ` · closed ${pctStr(o.roundtrip.ret)}` : "";
   const what = o.kind === "exit"
     ? `In the 5 trading days after the exit the price moved ${pctStr(o.ret)}${rt}.`
     : `Over the next 5 trading days the underlying moved ${pctStr(o.ret)}${rt}. Options are scored on the stock's direction, not the contract's profit.`;
   if (o.favorable === true)
-    return `<span class="tip oc oc-good" data-tip="${esc(what)} ✓ = moved 1%+ in the trade's favor.">✓ ${pctStr(o.ret)}</span>`;
+    return `<span class="tipx oc oc-good" data-tip="${esc(what)} ✓ = moved 1%+ in the trade's favor.">✓ ${pctStr(o.ret)}</span>`;
   if (o.favorable === false)
-    return `<span class="tip oc oc-bad" data-tip="${esc(what)} ✗ = moved 1%+ against the trade.">✗ ${pctStr(o.ret)}</span>`;
-  return `<span class="tip oc oc-flat" data-tip="${esc(what)} – = stayed within 1% (flat).">${pctStr(o.ret)}</span>`;
+    return `<span class="tipx oc oc-bad" data-tip="${esc(what)} ✗ = moved 1%+ against the trade.">✗ ${pctStr(o.ret)}</span>`;
+  return `<span class="tipx oc oc-flat" data-tip="${esc(what)} – = stayed within 1% (flat).">${pctStr(o.ret)}</span>`;
 }
 function renderTape(trades) {
   const el = $("tape");
@@ -290,7 +290,7 @@ function renderTraders() {
         <span style="color:var(--red)">${r.unf} ✗</span> ·
         <span style="color:var(--muted)">${r.flat} –</span>
         <span class="tc-sub">${r.scored} scored</span>
-        ${small ? `<span class="tip oc oc-pend" data-tip="Only ${r.scored} scored trades — too few to judge a track record.">small sample</span>` : ""}
+        ${small ? `<span class="tipx oc oc-pend" data-tip="Only ${r.scored} scored trades — too few to judge a track record.">small sample</span>` : ""}
       </div>
       ${topSym.length ? `<div class="tc-row"><span class="tc-k">Favorites</span> ${topSym.map(([s, n]) => `${esc(s)} ×${n}`).join(" · ")}</div>` : ""}
       ${instMix.length ? `<div class="tc-row"><span class="tc-k">Mix</span> ${instMix.map(([k, n]) => `${k} ×${n}`).join(" · ")}</div>` : ""}
@@ -384,8 +384,8 @@ async function init() {
   };
   // Tapping an ⓘ toggles its tooltip (touch devices have no hover)
   document.addEventListener("click", e => {
-    const tip = e.target.closest ? e.target.closest(".tip") : null;
-    document.querySelectorAll(".tip.show").forEach(t => { if (t !== tip) t.classList.remove("show"); });
+    const tip = e.target.closest ? e.target.closest(".tip, .tipx") : null;
+    document.querySelectorAll(".tip.show, .tipx.show").forEach(t => { if (t !== tip) t.classList.remove("show"); });
     if (tip) tip.classList.toggle("show");
   });
   $("generated").textContent = "data through " + fmtDay(DATA.day_range[1]) + (DATA.live ? " · live" : "");

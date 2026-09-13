@@ -191,7 +191,8 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px
   cursor: help; margin-left: 6px; position: relative; vertical-align: 2px;
   text-transform: none; letter-spacing: 0;
 }
-.tip:hover::after, .tip.show::after {
+.tip:hover::after, .tip.show::after,
+.tipx:hover::after, .tipx.show::after {
   content: attr(data-tip);
   position: absolute; bottom: 140%; left: 50%; transform: translateX(-50%);
   background: #000; color: #fff; font-size: 12px; font-weight: 400;
@@ -199,5 +200,9 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px
   white-space: normal; z-index: 30; line-height: 1.45; text-align: left;
   text-transform: none; letter-spacing: 0;
 }
+/* tipx = tooltip on an element that already has its own shape (e.g. outcome
+   pills). Same tap-to-show behavior as .tip, without the 16px circle chrome. */
+.tipx { position: relative; cursor: help; }
 /* in the sticky topbar the tooltip would fall off-screen above, so show it below */
 .tip-below:hover::after, .tip-below.show::after { bottom: auto; top: 150%; }
+.panel-head { flex-wrap: wrap; gap: 8px; }
