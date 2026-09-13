@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trade Flow — Group Activity</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">◈</div>
+    <div>
+      <h1>Trade Flow</h1>
+      <p>What the group traded · updates hourly <span class="tip tip-below" data-tip="A bot reads the group chat every hour (6am–10pm PT) and extracts the trades people mention. Everyone is anonymous.">i</span></p>
+    </div>
+  </div>
+  <div class="controls">
+    <button id="guideBtn" class="ghost">How to read this</button>
+    <div class="seg" id="rangeSeg">
+      <button data-mode="day" class="active">Day</button>
+      <button data-mode="week">Week</button>
+      <button data-mode="month">Month</button>
+    </div>
+    <span class="tip tip-below" data-tip="Time window: a single day, a 7-day week, or a 30-day month, ending on the date shown.">i</span>
+    <div class="datenav">
+      <button id="prevBtn" title="Previous">◀</button>
+      <span id="dateLabel">–</span>
+      <button id="nextBtn" title="Next">▶</button>
+      <button id="todayBtn" class="ghost">Latest</button>
+    </div>
+    <span class="tip tip-below" data-tip="Step the window back or forward in time. “Latest” jumps back to the most recent data.">i</span>
+  </div>
+</header>
+
+<section id="guide" class="panel guide">
+  <div class="guide-head">
+    <h2>How to read this page</h2>
+    <button id="guideClose" class="ghost">Got it ✕</button>
+  </div>
+  <p class="guide-intro">Every hour, a bot reads the trading group chat and pulls out the actual
+  trades people mention — buys, sells, options, plans. Everyone is anonymous
+  (<i>Trader 01, Trader 02…</i>): no names, no message text, just the trade itself.</p>
+  <dl class="guide-defs">
+    <div><dt>Trade tape</dt><dd>Every action mentioned, in time order. The colored word is what they did:
+      <b>BUY</b> opened a new position · <b>ADD</b> added to one · <b>SELL</b> sold ·
+      <b>TRIM</b> sold part of it · <b>EXIT</b> closed it completely ·
+      <b>PLAN</b> “I'll buy if…” · <b>HOLD / WATCH</b> sitting tight.</dd></div>
+    <div><dt>The dot</dt><dd>How sure the bot is it read the message correctly —
+      <span class="conf high"></span> sure · <span class="conf medium"></span> maybe ·
+      <span class="conf low"></span> shaky.</dd></div>
+    <div><dt>Outcome badge</dt><dd>How the trade did over the next <b>5 trading days</b>:
+      <b>✓ +3.2%</b> moved in the trade's favor · <b>✗ −1.5%</b> moved against ·
+      <b>– 0.4%</b> stayed flat (within 1%). For options the badge scores the
+      <i>stock's</i> direction, not the contract's profit — option prices aren't in the chat.
+      Plans show <b>✓ target hit</b> when the price touched the announced target within 14 days.
+      Tap any badge for details.</dd></div>
+    <div><dt>Net lean</dt><dd>Opening trades minus closing trades.
+      <b>+3 accumulating</b> = three more opens than closes — money going in.</dd></div>
+    <div><dt>Put / call</dt><dd>Bearish option bets ÷ bullish ones.
+      Above 1 = the group is betting more on downside than upside.</dd></div>
+    <div><dt>Crowd clusters</dt><dd>Symbols that 3 or more members all traded — where the group agrees.</dd></div>
+    <div><dt>Options lens</dt><dd>How far out the options bets expire: this month, 1–6 months, or LEAPS (6+ months).</dd></div>
+    <div><dt>Plans watchlist</dt><dd>Conditional orders people announced, e.g. “buy NVDA if it breaks 180”.</dd></div>
+  </dl>
+  <p class="hint">Tip: tap any symbol in the leaderboard to filter the whole page to just that symbol.</p>
+</section>
+
+<main>
+  <section class="digest" id="digest"></section>
+
+  <div class="grid">
+    <section class="panel tape-panel">
+      <div class="panel-head">
+        <h2>Trade tape <span class="tip" data-tip="Every trade action mentioned in the chat, in time order. The colored word is what the trader did. Tap a symbol in the leaderboard to filter.">i</span></h2>
+        <span id="tapeFilter" class="filter-chip hidden"></span>
+      </div>
+      <div id="tape" class="tape"></div>
+    </section>
+
+    <div class="side">
+      <section class="panel">
+        <h2>Instruments <span class="tip" data-tip="What kind of trades these were: shares, calls (bullish bets), puts (bearish bets), spreads, crypto.">i</span></h2>
+        <div id="donut" class="donut-wrap"></div>
+        <div id="donutLegend" class="legend"></div>
+      </section>
+      <section class="panel">
+        <h2>Action mix <span class="tip" data-tip="Opens (buy, add) vs closes (sell, trim, exit) vs plans and watches.">i</span></h2>
+        <div id="actionBars"></div>
+      </section>
+      <section class="panel">
+        <h2>Symbol leaderboard <span class="tip" data-tip="Most-mentioned symbols. The +/− number is opening trades minus closing trades for that symbol. Tap a row to filter the page.">i</span></h2>
+        <div id="leaderboard"></div>
+        <p class="hint">Tap a symbol to filter the tape</p>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel">
+    <h2>Crowd clusters <span class="tip" data-tip="Symbols traded by 3 or more members in this period — the ideas the group agrees on.">i</span> <span class="sub">symbols traded by 3+ members in range</span></h2>
+    <div id="clusters" class="clusters"></div>
+  </section>
+
+  <div class="grid-2">
+    <section class="panel">
+      <h2>Options lens <span class="tip" data-tip="When the options bets expire: within a month, 1–6 months, or LEAPS (more than 6 months out).">i</span></h2>
+      <div id="optionsLens"></div>
+    </section>
+    <section class="panel">
+      <h2>Plans watchlist <span class="tip" data-tip="“If X happens I'll trade Y” — conditional orders members announced in the last 14 days.">i</span> <span class="sub">conditional / planned orders</span></h2>
+      <div id="plans"></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>Activity <span class="tip" data-tip="How many trade actions the chat produced each day. Darker = busier. Hover any square for the date.">i</span> <span class="sub">actions per day, last 60 days</span></h2>
+    <div id="heatmap" class="heatmap"></div>
+  </section>
+</main>
+
+<footer>
+  <span id="generated"></span> · members shown as anonymous traders · structured records only, no message text
+</footer>
+
+<script src="supabase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
