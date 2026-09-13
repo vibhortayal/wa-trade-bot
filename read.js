@@ -167,6 +167,8 @@ client.on('ready', async () => {
     } catch (e) {
       lastErr = e;
       console.log(`[read] attempt ${attempt} failed (${e.message}), retrying...`);
+      // Tear down any half-started browser so the next attempt can take the profile lock.
+      try { await client.destroy(); } catch (_) { /* ignore */ }
       await sleep(8000);
     }
   }

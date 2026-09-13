@@ -7,6 +7,10 @@ if [ "$HOUR" -lt 6 ] || [ "$HOUR" -ge 22 ]; then
   echo "$(date -u +%FT%TZ) skipped: outside 06-22 PT window"
   exit 0
 fi
+# On this Hatch VM, Chromium ignores env proxies, so the reader requires the
+# local CONNECT forwarder (127.0.0.1:18080 -> Hatch egress proxy). Default
+# USE_PROXY=1 here; override explicitly to 0/empty for direct egress.
+export USE_PROXY="${USE_PROXY:-1}"
 LOG=~/workspace/wa-trade-reader/logs/hourly.log
 mkdir -p ~/workspace/wa-trade-reader/logs
 {
