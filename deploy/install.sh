@@ -35,9 +35,11 @@ npm install --no-audit --no-fund
 echo "==> .env"
 if [ ! -f .env ]; then
   cp .env.example .env
-  read -rsp "Choose an admin password for the setup UI: " ADMIN_PW; echo
+  if [ -z "${ADMIN_PASSWORD:-}" ]; then
+    read -rsp "Choose an admin password for the setup UI: " ADMIN_PASSWORD; echo
+  fi
   # portable in-place set of ADMIN_PASSWORD
-  python3 - "$ADMIN_PW" <<'EOF'
+  python3 - "$ADMIN_PASSWORD" <<'EOF'
 import sys, re
 pw = sys.argv[1]
 p = ".env"

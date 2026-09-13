@@ -1,0 +1,5 @@
+# Optional: pin variable values here instead of entering them in the console.
+# tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaa..."
+# compartment_ocid = "ocid1.tenancy.oc1..aaaaaaa..."
+# ssh_public_key   = "ssh-ed25519 AAAA... hatch"
+# shape            = "VM.Standard.A1.Flex"

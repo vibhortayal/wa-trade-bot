@@ -13,7 +13,18 @@ from Supabase instead of the baked-in static JSON.
 | `wa_trades` / `wa_meta` | Supabase | anonymized actions only; anon key is read-only via RLS |
 | dashboard | Vercel | reads Supabase live, falls back to static JSON |
 
-## 1. Create the free VM (Oracle Cloud, ~10 min)
+## 1. Create the free VM (Oracle Cloud)
+
+**Fastest path — Resource Manager stack (recommended):**
+`deploy/terraform.zip` contains a Terraform stack (`main.tf`) that provisions
+the `wa-trade-bot` instance reusing the pre-built `bot-vcn` networking
+(public subnet + port-3001 ingress rule). In the Oracle console:
+Resource Manager → Stacks → Create stack → "My configuration" → upload the zip,
+name it `wa-trade-bot`, fill in `tenancy_ocid`, `compartment_ocid` (same value),
+`ssh_public_key`, and Apply. If the apply fails with "out of capacity", just
+re-run Apply later — capacity for free shapes frees up sporadically.
+
+**Manual path (~10 min):**
 
 1. Sign up at [cloud.oracle.com](https://cloud.oracle.com) (credit card required for
    verification; the Always Free tier itself costs nothing).
