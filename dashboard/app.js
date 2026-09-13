@@ -49,14 +49,17 @@ function setPreview(kind, value) {
     }
   }
 }
-function previewTrades() {
+function previewTrades(trades) {
   const p = state.preview;
   if (!p) return null;
-  const base = DATA.trades.filter(t => windowDays().includes(t.day));
-  if (p.kind === "symbol") return base.filter(t => t.symbol === p.value);
-  if (p.kind === "instrument") return base.filter(t => (t.instrument || "other") === p.value);
-  if (p.kind === "action") return base.filter(t => t.action === p.value);
-  if (p.kind === "obucket") return base.filter(t => (expiryBucket(t) || "unstated") === p.value);
+  if (p.kind === "all") return trades;
+  if (p.kind === "scored") return trades.filter(t => outcomeClass(t));
+  if (p.kind === "options") return trades.filter(t => ["call", "put", "spread"].includes(t.instrument));
+  if (p.kind === "flow") return trades.filter(t => OPEN.has(t.action) || CLOSE.has(t.action));
+  if (p.kind === "symbol") return trades.filter(t => t.symbol === p.value);
+  if (p.kind === "instrument") return trades.filter(t => (t.instrument || "other") === p.value);
+  if (p.kind === "action") return trades.filter(t => t.action === p.value);
+  if (p.kind === "obucket") return trades.filter(t => (expiryBucket(t) || "unstated") === p.value);
   return [];
 }
 function outcomeClass(t) {
@@ -92,12 +95,21 @@ function renderDigest(trades) {
   const flatN = scored.length - fav - unf;
   const ocTip = "How trades did over the next 5 trading days. Green = moved 1%+ in the trade's favor, red = 1%+ against, gray = stayed flat. Options are scored on the stock's direction, not the contract's profit. A plan's target counts as hit if the price touches it within 14 days.";
   $("digest").innerHTML = `
-    <div class="stat"><div class="k">Trade actions <span class="tip" data-tip="Individual buy / sell / plan mentions the bot extracted from chat messages.">i</span></div><div class="v">${trades.length}</div><div class="s">${state.mode} · ${fmtRange()}</div></div>
-    <div class="stat"><div class="k">Active traders <span class="tip" data-tip="How many anonymous members posted trades in this period.">i</span></div><div class="v">${traders.size}</div><div class="s">anonymous members</div></div>
-    <div class="stat"><div class="k">Top symbol <span class="tip" data-tip="The most-mentioned symbol in this period.">i</span></div><div class="v">${top ? esc(top[0]) : "–"}</div><div class="s">${top ? top[1] + " actions" : ""}</div></div>
-    <div class="stat"><div class="k">Put / call <span class="tip" data-tip="Bearish option bets divided by bullish ones. Above 1 means more downside bets than upside.">i</span></div><div class="v">${pc}</div><div class="s">${puts} puts · ${calls} calls</div></div>
-    <div class="stat"><div class="k">Net lean <span class="tip" data-tip="Opening trades (buy, add) minus closing trades (sell, trim, exit). Positive means the group is putting money in; negative means taking it out.">i</span></div><div class="v" style="color:${leanColor}">${esc(leanLabel)}</div><div class="s">opens minus closes</div></div>
-    <div class="stat"><div class="k">Outcomes <span class="tip" data-tip="${ocTip}">i</span></div><div class="v"><span style="color:var(--green)">${fav} ✓</span> · <span style="color:var(--red)">${unf} ✗</span></div><div class="s">${flatN} flat · ${scored.length} scored</div></div>`;
+    <div class="stat tap" data-digest="all"><div class="k">Trade actions <span class="tip" data-tip="Individual buy / sell / plan mentions the bot extracted from chat messages.">i</span></div><div class="v">${trades.length}</div><div class="s">${state.mode} · ${fmtRange()}</div></div>
+    <div class="stat tap" data-digest="traders"><div class="k">Active traders <span class="tip" data-tip="How many anonymous members posted trades in this period.">i</span></div><div class="v">${traders.size}</div><div class="s">anonymous members</div></div>
+    <div class="stat tap" data-digest="top"><div class="k">Top symbol <span class="tip" data-tip="The most-mentioned symbol in this period.">i</span></div><div class="v">${top ? esc(top[0]) : "–"}</div><div class="s">${top ? top[1] + " actions" : ""}</div></div>
+    <div class="stat tap" data-digest="options"><div class="k">Put / call <span class="tip" data-tip="Bearish option bets divided by bullish ones. Above 1 means more downside bets than upside.">i</span></div><div class="v">${pc}</div><div class="s">${puts} puts · ${calls} calls</div></div>
+    <div class="stat tap" data-digest="flow"><div class="k">Net lean <span class="tip" data-tip="Opening trades (buy, add) minus closing trades (sell, trim, exit). Positive means the group is putting money in; negative means taking it out.">i</span></div><div class="v" style="color:${leanColor}">${esc(leanLabel)}</div><div class="s">opens minus closes</div></div>
+    <div class="stat tap" data-digest="scored"><div class="k">Outcomes <span class="tip" data-tip="${ocTip}">i</span></div><div class="v"><span style="color:var(--green)">${fav} ✓</span> · <span style="color:var(--red)">${unf} ✗</span></div><div class="s">${flatN} flat · ${scored.length} scored</div></div>`;
+  document.querySelectorAll("#digest .stat").forEach(el => {
+    el.onclick = e => {
+      if (e.target.closest(".tip")) return; // the ⓘ keeps its tooltip
+      const k = el.dataset.digest;
+      if (k === "traders") { state.tab = "traders"; render(); window.scrollTo(0, 0); return; }
+      if (k === "top") { if (top) setPreview("symbol", top[0]); return; }
+      setPreview(k, k);
+    };
+  });
 }
 function fmtRange() {
   const w = windowDays();
@@ -264,7 +276,10 @@ function renderSliceSummary(trades) {
   const p = state.preview;
   let list = null, label = "", isPrev = false;
   if (p) {
-    list = previewTrades(); label = p.value; isPrev = true;
+    list = previewTrades(trades);
+    isPrev = true;
+    label = p.kind === "all" ? "All actions" : p.kind === "scored" ? "Scored outcomes"
+      : p.kind === "options" ? "Options" : p.kind === "flow" ? "Opening & closing" : p.value;
   } else {
     const anyFilter = state.symbol || state.trader || state.instrument || state.action || state.obucket || state.ofav;
     if (!anyFilter) { wrap.classList.add("hidden"); wrap.innerHTML = ""; return; }
@@ -275,6 +290,11 @@ function renderSliceSummary(trades) {
   }
   wrap.classList.remove("hidden");
   const bits = sliceStatsBits(list);
+  if (p && p.kind === "flow") {
+    const opens = list.filter(t => OPEN.has(t.action)).length;
+    const closes = list.filter(t => CLOSE.has(t.action)).length;
+    bits.unshift(`<b>${opens}</b> opens · <b>${closes}</b> closes`);
+  }
   wrap.innerHTML = `<div class="ss-label">${esc(label)}${isPrev ? ` <button id="ssX" class="ss-x" aria-label="dismiss">✕</button>` : ""}</div>` +
     `<div class="ss-stats">${bits.join("<span class='ss-dot'>·</span>")}</div>`;
   if (isPrev) $("ssX").onclick = e => { e.stopPropagation(); state.preview = null; render(); };
