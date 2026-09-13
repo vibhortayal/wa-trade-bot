@@ -1,5 +1,5 @@
 /* Trade Flow dashboard — vanilla JS, hand-rolled SVG */
-const state = { mode: "day", end: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, preview: null, tab: "market", traderSort: "active" };
+const state = { mode: "day", end: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, showFilters: false, tab: "market", traderSort: "active" };
 let DATA = null;
 
 const ACTION_COLORS = {
@@ -66,7 +66,7 @@ function openSheet(kind, value) {
   if (fmap[kind]) {
     fb.classList.remove("hidden");
     fb.textContent = `Filter tape to this ${kind === "obucket" ? "expiry" : kind}`;
-    fb.onclick = () => { closeSheet(); state[fmap[kind]] = value; render(); };
+    fb.onclick = () => { closeSheet(); state[fmap[kind]] = value; state.showFilters = true; render(); };
   } else if (kind === "all" && anyFilter) {
     fb.classList.remove("hidden");
     fb.textContent = "Clear all filters";
@@ -228,7 +228,9 @@ function renderTape(trades) {
 /* filter dropdowns on the tape — always visible on the Market tab */
 function renderTapeFilters() {
   const wrap = $("tapeFilters");
-  wrap.classList.remove("hidden");
+  const n = [state.trader, state.symbol, state.instrument, state.action, state.obucket, state.ofav].filter(Boolean).length;
+  $("filterToggle").innerHTML = `Filters${n ? ` (${n})` : ""} <span class="farrow">${state.showFilters ? "&#9652;" : "&#9662;"}</span>`;
+  wrap.classList.toggle("hidden", !state.showFilters);
   const traders = [...new Set(DATA.trades.map(t => t.trader))]
     .sort((a, b) => a === "You" ? -1 : b === "You" ? 1 : a.localeCompare(b, undefined, { numeric: true }));
   const syms = [...new Set(DATA.trades.filter(t => t.symbol).map(t => t.symbol))].sort();
@@ -358,12 +360,13 @@ function renderClusters(trades) {
   });
   const clusters = Object.entries(by).filter(([, d]) => d.traders.size >= 3)
     .sort((a, b) => b[1].traders.size - a[1].traders.size);
-  $("clusters").innerHTML = clusters.length ? clusters.map(([s, d]) => `
+  $("clustersPanel").classList.toggle("hidden", !clusters.length);
+  if (!clusters.length) { $("clusters").innerHTML = ""; return; }
+  $("clusters").innerHTML = clusters.map(([s, d]) => `
     <div class="cluster tap " data-sym="${esc(s)}"><div class="cs">${esc(s)}</div>
       <div class="cm">${d.traders.size} traders · ${d.n} actions</div>
       <div class="ca net ${d.net > 0 ? "pos" : d.net < 0 ? "neg" : "flat"}">net ${d.net > 0 ? "+" : ""}${d.net}</div>
-    </div>`).join("")
-    : `<div class="empty">No symbol was traded by 3+ members in this range.</div>`;
+    </div>`).join("");
   document.querySelectorAll(".cluster").forEach(el => {
     el.onclick = () => openSheet("symbol", el.dataset.sym);
   });
@@ -381,6 +384,8 @@ function expiryBucket(t) {
 }
 function renderOptions(trades) {
   const opts = trades.filter(t => ["call", "put", "spread"].includes(t.instrument));
+  $("optionsPanel").classList.toggle("hidden", !opts.length);
+  if (!opts.length) { $("optionsLens").innerHTML = ""; return; }
   const buckets = { "≤ 1 month": [], "1–6 months": [], "LEAPS (> 6 mo)": [], "unstated": [] };
   opts.forEach(t => (buckets[expiryBucket(t) || "unstated"]).push(t));
   const max = Math.max(...Object.values(buckets).map(b => b.length), 1);
@@ -389,7 +394,7 @@ function renderOptions(trades) {
       <div class="ob-head"><b>${k}</b><span>${arr.length}</span></div>
       <div class="hbar-track"><div class="hbar-fill" style="width:${(arr.length / max * 100).toFixed(0)}%;background:var(--amber)"></div></div>
       ${arr.slice(0, 4).map(t => `<div class="opt-ex">${esc(t.symbol || "?")} ${esc(t.instrument)}${t.strike ? " $" + t.strike : ""}${t.expiry ? " " + t.expiry : ""} · ${t.action}</div>`).join("")}
-    </div>`).join("") || `<div class="empty">No options in range.</div>`;
+    </div>`).join("");
   document.querySelectorAll(".opt-bucket").forEach(el => {
     el.onclick = () => openSheet("obucket", el.dataset.obucket);
   });
@@ -400,11 +405,12 @@ function renderPlans() {
   const plans = DATA.trades
     .filter(t => t.action === "PLAN" && t.day <= state.end && t.day >= cutoff.toISOString().slice(0, 10))
     .sort((a, b) => b.ts - a.ts).slice(0, 8);
-  $("plans").innerHTML = plans.length ? plans.map(t => `
+  $("plansPanel").classList.toggle("hidden", !plans.length);
+  if (!plans.length) { $("plans").innerHTML = ""; return; }
+  $("plans").innerHTML = plans.map(t => `
     <div class="plan-row tap " data-sym="${esc(t.symbol || "")}"><b>${esc(t.symbol || "—")}</b> <span class="tinst">${esc(instLabel(t))}</span>
       <div class="tnote">${esc(t.note)}</div>
-      <div class="pd">${fmtDay(t.day)} · ${esc(t.trader)}</div></div>`).join("")
-    : `<div class="empty">No planned/conditional orders in the last 14 days.</div>`;
+      <div class="pd">${fmtDay(t.day)} · ${esc(t.trader)}</div></div>`).join("");
   document.querySelectorAll(".plan-row").forEach(el => {
     el.onclick = () => {
       if (!el.dataset.sym) return;
@@ -569,15 +575,10 @@ async function loadData() {
 async function init() {
   DATA = await loadData();
   state.end = DATA.day_range[1];
-  // Guide panel: show on first visit, remember dismissal
-  try {
-    if (localStorage.getItem("tradeflow_guide_seen")) $("guide").classList.add("hidden");
-  } catch (e) { /* storage unavailable — leave guide visible */ }
+  // Guide panel: hidden by default, toggled by the "How to read this" button
   $("guideBtn").onclick = () => $("guide").classList.toggle("hidden");
-  $("guideClose").onclick = () => {
-    $("guide").classList.add("hidden");
-    try { localStorage.setItem("tradeflow_guide_seen", "1"); } catch (e) {}
-  };
+  $("guideClose").onclick = () => $("guide").classList.add("hidden");
+  $("filterToggle").onclick = () => { state.showFilters = !state.showFilters; render(); };
   // Tapping an ⓘ toggles its tooltip (touch devices have no hover)
   $("sheetX").onclick = closeSheet;
 $("sheetBackdrop").onclick = closeSheet;

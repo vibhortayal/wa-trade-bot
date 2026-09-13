@@ -120,6 +120,9 @@ main { max-width: 1180px; margin: 0 auto; padding: 18px 22px 40px; }
 #donutLegend .tap { border-radius: 6px; padding: 1px 5px; margin: -1px -5px; }
 /* tape filter dropdowns (shown when viewing a single trader) */
 .tape-filters { display: flex; gap: 10px; flex-wrap: wrap; margin: 2px 0 10px; }
+.tape-filters.hidden { display: none; }
+.filter-toggle { margin: 2px 0 10px; }
+.filter-toggle .farrow { font-size: 10px; color: var(--muted); }
 .tfilter { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
 .tfilter select {
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
