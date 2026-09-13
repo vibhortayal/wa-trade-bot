@@ -104,6 +104,14 @@ main { max-width: 1180px; margin: 0 auto; padding: 18px 22px 40px; }
 .oc-flat { background: rgba(138,148,166,.16); color: var(--muted); }
 .oc-hit { background: rgba(38,166,154,.16); color: var(--green); }
 .oc-pend { background: rgba(255,179,0,.16); color: var(--amber); }
+.trader-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
+.tcard { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.tc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.tc-meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.tc-record { font-size: 14px; font-weight: 600; margin-bottom: 6px; display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+.tc-sub { color: var(--muted); font-size: 12px; font-weight: 400; }
+.tc-row { font-size: 12.5px; margin-top: 4px; }
+.tc-k { color: var(--muted); margin-right: 6px; }
 .tsym { font-weight: 700; font-size: 14px; }
 .tinst { color: var(--muted); font-size: 12px; }
 .ttrader { color: var(--muted); font-size: 12px; margin-left: auto; }

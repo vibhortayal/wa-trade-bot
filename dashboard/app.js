@@ -1,5 +1,5 @@
 /* Trade Flow dashboard — vanilla JS, hand-rolled SVG */
-const state = { mode: "day", end: null, symbol: null };
+const state = { mode: "day", end: null, symbol: null, tab: "market", traderSort: "active" };
 let DATA = null;
 
 const ACTION_COLORS = {
@@ -252,8 +252,61 @@ function renderHeatmap() {
   $("heatmap").innerHTML = cells.join("");
 }
 
+/* ---------- traders tab ---------- */
+function renderTraders() {
+  const by = {};
+  DATA.trades.forEach(t => {
+    const d = by[t.trader] = by[t.trader] || {
+      n: 0, days: new Set(), sym: {}, inst: {},
+      fav: 0, unf: 0, flat: 0, rt: [], tgtHit: 0, tgt: 0,
+    };
+    d.n++; d.days.add(t.day);
+    if (t.symbol) d.sym[t.symbol] = (d.sym[t.symbol] || 0) + 1;
+    const k = t.instrument || "other"; d.inst[k] = (d.inst[k] || 0) + 1;
+    const o = t.outcome;
+    if (o && o.scored) {
+      if (o.kind === "plan" && o.target != null) { d.tgt++; if (o.tgt_hit) d.tgtHit++; }
+      else if (o.favorable === true) d.fav++;
+      else if (o.favorable === false) d.unf++;
+      else d.flat++;
+      if (o.roundtrip && o.roundtrip.ret != null) d.rt.push(o.roundtrip.ret);
+    }
+  });
+  let rows = Object.entries(by).map(([name, d]) => ({ name, ...d, scored: d.fav + d.unf + d.flat }));
+  const rate = r => r.scored ? r.fav / r.scored : -1;
+  rows.sort(state.traderSort === "record"
+    ? (a, b) => rate(b) - rate(a) || b.scored - a.scored
+    : (a, b) => b.n - a.n);
+  $("traderCards").innerHTML = rows.map(r => {
+    const topSym = Object.entries(r.sym).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const instMix = Object.entries(r.inst).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const avgRt = r.rt.length ? r.rt.reduce((a, b) => a + b, 0) / r.rt.length : null;
+    const small = r.scored > 0 && r.scored < 5;
+    return `<div class="tcard">
+      <div class="tc-head"><b>${esc(r.name)}</b>
+        <span class="tc-meta">${r.n} actions · ${r.days.size} days</span></div>
+      <div class="tc-record">
+        <span style="color:var(--green)">${r.fav} ✓</span> ·
+        <span style="color:var(--red)">${r.unf} ✗</span> ·
+        <span style="color:var(--muted)">${r.flat} –</span>
+        <span class="tc-sub">${r.scored} scored</span>
+        ${small ? `<span class="tip oc oc-pend" data-tip="Only ${r.scored} scored trades — too few to judge a track record.">small sample</span>` : ""}
+      </div>
+      ${topSym.length ? `<div class="tc-row"><span class="tc-k">Favorites</span> ${topSym.map(([s, n]) => `${esc(s)} ×${n}`).join(" · ")}</div>` : ""}
+      ${instMix.length ? `<div class="tc-row"><span class="tc-k">Mix</span> ${instMix.map(([k, n]) => `${k} ×${n}`).join(" · ")}</div>` : ""}
+      ${r.rt.length ? `<div class="tc-row"><span class="tc-k">Round trips</span> ${r.rt.length} closed · avg <b style="color:${avgRt >= 0 ? "var(--green)" : "var(--red)"}">${pctStr(avgRt)}</b></div>` : ""}
+      ${r.tgt ? `<div class="tc-row"><span class="tc-k">Targets</span> ${r.tgtHit}/${r.tgt} hit</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
 /* ---------- shell ---------- */
 function render() {
+  document.querySelectorAll("#tabSeg button").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === state.tab));
+  $("marketView").classList.toggle("hidden", state.tab !== "market");
+  $("tradersView").classList.toggle("hidden", state.tab !== "traders");
+  if (state.tab === "traders") { renderTraders(); return; }
   const trades = rangeTrades();
   $("dateLabel").textContent = fmtRange();
   const days = DATA.day_range;
@@ -338,6 +391,15 @@ async function init() {
   $("generated").textContent = "data through " + fmtDay(DATA.day_range[1]) + (DATA.live ? " · live" : "");
   document.querySelectorAll("#rangeSeg button").forEach(b =>
     b.onclick = () => { state.mode = b.dataset.mode; state.symbol = null; render(); });
+  document.querySelectorAll("#tabSeg button").forEach(b =>
+    b.onclick = () => { state.tab = b.dataset.tab; render(); });
+  document.querySelectorAll("#traderSortSeg button").forEach(b =>
+    b.onclick = () => {
+      state.traderSort = b.dataset.sort;
+      document.querySelectorAll("#traderSortSeg button").forEach(x =>
+        x.classList.toggle("active", x === b));
+      renderTraders();
+    });
   $("prevBtn").onclick = () => shift(-1);
   $("nextBtn").onclick = () => shift(1);
   $("todayBtn").onclick = () => { state.end = DATA.day_range[1]; render(); };
