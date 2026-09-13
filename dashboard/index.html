@@ -46,10 +46,11 @@
       <b>BUY</b> opened a new position · <b>ADD</b> added to one · <b>SELL</b> sold ·
       <b>TRIM</b> sold part of it · <b>EXIT</b> closed it completely ·
       <b>PLAN</b> “I'll buy if…” · <b>HOLD / WATCH</b> sitting tight.</dd></div>
-    <div><dt>Tap to filter</dt><dd>Almost everything is tappable: trader cards, symbols, instruments,
-      actions, clusters, option buckets, plans, even heatmap days. Tapping filters the whole
-      page to that slice and shows a summary — how many actions, the ✓/✗/– record, hit rate,
-      average move, round trips. Tap again to clear. The chip above the tape shows what's filtered.</dd></div>
+    <div><dt>Tap to inspect</dt><dd>Tap any card — a symbol, instrument, action, cluster, option
+      bucket or plan — to see its numbers in the summary bar above the tape: how many actions,
+      the ✓/✗/– record, hit rate, average move, round trips. Tapping never filters anything;
+      to filter the whole page, use the dropdowns above the trade tape
+      (Trader / Instrument / Action / Outcome). Tap the card again, or the ✕, to dismiss.</dd></div>
     <div><dt>The dot</dt><dd>How sure the bot is it read the message correctly —
       <span class="conf high"></span> sure · <span class="conf medium"></span> maybe ·
       <span class="conf low"></span> shaky.</dd></div>
@@ -88,7 +89,7 @@
   <div class="grid">
     <section class="panel tape-panel">
       <div class="panel-head">
-        <h2>Trade tape <span class="tip" data-tip="Every trade action mentioned in the chat, in time order. The colored word is what the trader did. Tap a symbol in the leaderboard to filter.">i</span></h2>
+        <h2>Trade tape <span class="tip" data-tip="Every trade action mentioned in the chat, in time order. The colored word is what the trader did. Use the dropdowns to filter; tap any card on the page to inspect its numbers.">i</span></h2>
         <span id="tapeFilter" class="filter-chip hidden"></span>
       </div>
       <div id="tapeFilters" class="tape-filters hidden"></div>

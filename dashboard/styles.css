@@ -127,7 +127,12 @@ main { max-width: 1180px; margin: 0 auto; padding: 18px 22px 40px; }
 }
 /* slice summary: the "more data" shown when a card is tapped / a filter is active */
 .slice-summary { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 2px 0 10px; }
-.ss-label { font-weight: 700; font-size: 13px; margin-bottom: 5px; }
+.ss-label { font-weight: 700; font-size: 13px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
+.ss-x {
+  background: var(--panel); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 50%; width: 22px; height: 22px; font-size: 11px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
 .ss-stats { font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .ss-dot { color: var(--muted); }
 .tsym { font-weight: 700; font-size: 14px; }

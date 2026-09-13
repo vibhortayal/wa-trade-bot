@@ -1,5 +1,5 @@
 /* Trade Flow dashboard — vanilla JS, hand-rolled SVG */
-const state = { mode: "day", end: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, tab: "market", traderSort: "active" };
+const state = { mode: "day", end: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, preview: null, tab: "market", traderSort: "active" };
 let DATA = null;
 
 const ACTION_COLORS = {
@@ -34,7 +34,23 @@ function inRange(t) {
     && (!state.obucket || (expiryBucket(t) || "unstated") === state.obucket)
     && (!state.ofav || outcomeClass(t) === state.ofav);
 }
-function clearFilters() { state.symbol = state.trader = state.instrument = state.action = state.obucket = state.ofav = null; }
+function clearFilters() { state.symbol = state.trader = state.instrument = state.action = state.obucket = state.ofav = state.preview = null; }
+/* tap-to-inspect: tapping a card shows its numbers in the summary bar, never filters */
+function isPreview(kind, value) { const p = state.preview; return !!p && p.kind === kind && p.value === value; }
+function setPreview(kind, value) {
+  state.preview = isPreview(kind, value) ? null : { kind, value };
+  render();
+}
+function previewTrades() {
+  const p = state.preview;
+  if (!p) return null;
+  const base = DATA.trades.filter(t => windowDays().includes(t.day));
+  if (p.kind === "symbol") return base.filter(t => t.symbol === p.value);
+  if (p.kind === "instrument") return base.filter(t => (t.instrument || "other") === p.value);
+  if (p.kind === "action") return base.filter(t => t.action === p.value);
+  if (p.kind === "obucket") return base.filter(t => (expiryBucket(t) || "unstated") === p.value);
+  return [];
+}
 function outcomeClass(t) {
   const o = t.outcome;
   if (!o || !o.scored) return null;
@@ -180,6 +196,7 @@ function renderTapeFilters() {
   wrap.classList.remove("hidden");
   const traders = [...new Set(DATA.trades.map(t => t.trader))]
     .sort((a, b) => a === "You" ? -1 : b === "You" ? 1 : a.localeCompare(b, undefined, { numeric: true }));
+  const syms = [...new Set(DATA.trades.filter(t => t.symbol).map(t => t.symbol))].sort();
   const sel = (id, label, opts, cur) => `
     <label class="tfilter"><span>${label}</span>
       <select id="${id}">${opts.map(o => `<option value="${o.v}"${o.v === cur ? " selected" : ""}>${o.t}</option>`).join("")}</select>
@@ -188,6 +205,9 @@ function renderTapeFilters() {
     sel("fTrader", "Trader",
       [{ v: "", t: "All" }].concat(traders.map(x => ({ v: x, t: x }))),
       state.trader || "") +
+    sel("fSym", "Symbol",
+      [{ v: "", t: "All" }].concat(syms.map(s => ({ v: s, t: s }))),
+      state.symbol || "") +
     sel("fInst", "Instrument",
       [{ v: "", t: "All" }].concat(["stock", "call", "put", "spread", "crypto", "other"].map(i => ({ v: i, t: i }))),
       state.instrument || "") +
@@ -198,21 +218,18 @@ function renderTapeFilters() {
       [{ v: "", t: "All" }, { v: "fav", t: "✓ favorable" }, { v: "unf", t: "✗ unfavorable" }, { v: "flat", t: "– flat" }],
       state.ofav || "");
   $("fTrader").onchange = e => { state.trader = e.target.value || null; render(); };
+  $("fSym").onchange = e => { state.symbol = e.target.value || null; render(); };
   $("fInst").onchange = e => { state.instrument = e.target.value || null; render(); };
   $("fAct").onchange = e => { state.action = e.target.value || null; render(); };
   $("fOc").onchange = e => { state.ofav = e.target.value || null; render(); };
 }
 
-/* summary of whatever slice the filters/taps selected — the "more data" for a tap */
-function renderSliceSummary(trades) {
-  const wrap = $("sliceSummary");
-  const anyFilter = state.symbol || state.trader || state.instrument || state.action || state.obucket || state.ofav;
-  if (!anyFilter) { wrap.classList.add("hidden"); wrap.innerHTML = ""; return; }
-  wrap.classList.remove("hidden");
+/* summary of a slice — either the active filters or the tapped card's preview */
+function sliceStatsBits(list) {
   const traders = new Set();
   let fav = 0, unf = 0, flat = 0, rt = 0, tgtHit = 0, tgt = 0;
   const rets = [];
-  trades.forEach(t => {
+  list.forEach(t => {
     traders.add(t.trader);
     const c = outcomeClass(t);
     if (!c) return;
@@ -225,17 +242,34 @@ function renderSliceSummary(trades) {
   });
   const scored = fav + unf + flat;
   const avg = rets.length ? rets.reduce((a, b) => a + b, 0) / rets.length : null;
-  const label = [state.trader, state.symbol, state.instrument, state.action, state.obucket,
-    state.ofav === "fav" ? "✓ favorable" : state.ofav === "unf" ? "✗ unfavorable" : state.ofav === "flat" ? "– flat" : null
-  ].filter(Boolean).join(" · ");
-  const bits = [`<b>${trades.length}</b> action${trades.length === 1 ? "" : "s"}`];
-  if (!state.trader) bits.push(`<b>${traders.size}</b> trader${traders.size === 1 ? "" : "s"}`);
+  const bits = [`<b>${list.length}</b> action${list.length === 1 ? "" : "s"}`];
+  bits.push(`<b>${traders.size}</b> trader${traders.size === 1 ? "" : "s"}`);
   if (scored) bits.push(`${fav} ✓ · ${unf} ✗ · ${flat} – <span class="tc-sub">of ${scored} scored</span>`);
   if (fav + unf) bits.push(`hit rate <b>${Math.round(fav / (fav + unf) * 100)}%</b>`);
   if (avg != null) bits.push(`avg move <b style="color:${avg >= 0 ? "var(--green)" : "var(--red)"}">${pctStr(avg)}</b>`);
   if (rt) bits.push(`<b>${rt}</b> round trip${rt === 1 ? "" : "s"} closed`);
   if (tgt) bits.push(`<b>${tgtHit}/${tgt}</b> targets hit`);
-  wrap.innerHTML = `<div class="ss-label">${esc(label)}</div><div class="ss-stats">${bits.join("<span class='ss-dot'>·</span>")}</div>`;
+  return bits;
+}
+function renderSliceSummary(trades) {
+  const wrap = $("sliceSummary");
+  const p = state.preview;
+  let list = null, label = "", isPrev = false;
+  if (p) {
+    list = previewTrades(); label = p.value; isPrev = true;
+  } else {
+    const anyFilter = state.symbol || state.trader || state.instrument || state.action || state.obucket || state.ofav;
+    if (!anyFilter) { wrap.classList.add("hidden"); wrap.innerHTML = ""; return; }
+    list = trades;
+    label = [state.trader, state.symbol, state.instrument, state.action, state.obucket,
+      state.ofav === "fav" ? "✓ favorable" : state.ofav === "unf" ? "✗ unfavorable" : state.ofav === "flat" ? "– flat" : null
+    ].filter(Boolean).join(" · ");
+  }
+  wrap.classList.remove("hidden");
+  const bits = sliceStatsBits(list);
+  wrap.innerHTML = `<div class="ss-label">${esc(label)}${isPrev ? ` <button id="ssX" class="ss-x" aria-label="dismiss">✕</button>` : ""}</div>` +
+    `<div class="ss-stats">${bits.join("<span class='ss-dot'>·</span>")}</div>`;
+  if (isPrev) $("ssX").onclick = e => { e.stopPropagation(); state.preview = null; render(); };
 }
 
 /* ---------- side panels ---------- */
@@ -244,9 +278,9 @@ function renderSide(trades) {
   trades.forEach(t => { const k = t.instrument || "other"; inst[k] = (inst[k] || 0) + 1; });
   $("donut").innerHTML = donut(inst);
   $("donutLegend").innerHTML = Object.entries(inst).sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => `<span class="tap ${state.instrument === k ? "factive" : ""}" data-inst="${esc(k)}"><span class="dot" style="background:${INST_COLORS[k] || INST_COLORS.other}"></span>${k} · ${v}</span>`).join("");
+    .map(([k, v]) => `<span class="tap ${isPreview("instrument", k) ? "factive" : ""}" data-inst="${esc(k)}"><span class="dot" style="background:${INST_COLORS[k] || INST_COLORS.other}"></span>${k} · ${v}</span>`).join("");
   document.querySelectorAll("#donutLegend .tap").forEach(el => {
-    el.onclick = () => { state.instrument = state.instrument === el.dataset.inst ? null : el.dataset.inst; render(); };
+    el.onclick = () => setPreview("instrument", el.dataset.inst);
   });
 
   const acts = {};
@@ -255,8 +289,8 @@ function renderSide(trades) {
     Object.entries(acts).sort((a, b) => b[1] - a[1]),
     lbl => ACTION_COLORS[lbl] || "#8a94a6");
   document.querySelectorAll("#actionBars .hbar-row").forEach(el => {
-    el.classList.toggle("factive", state.action === el.dataset.lbl);
-    el.onclick = () => { state.action = state.action === el.dataset.lbl ? null : el.dataset.lbl; render(); };
+    el.classList.toggle("factive", isPreview("action", el.dataset.lbl));
+    el.onclick = () => setPreview("action", el.dataset.lbl);
   });
 
   const sym = {};
@@ -269,7 +303,7 @@ function renderSide(trades) {
   });
   const rows = Object.entries(sym).sort((a, b) => b[1].n - a[1].n).slice(0, 12);
   $("leaderboard").innerHTML = rows.length ? rows.map(([s, d]) => `
-    <div class="sym-row ${state.symbol === s ? "active" : ""}" data-sym="${esc(s)}">
+    <div class="sym-row ${isPreview("symbol", s) ? "active" : ""}" data-sym="${esc(s)}">
       <div class="sym-top"><span class="s">${esc(s)}</span>
         <span class="net ${d.net > 0 ? "pos" : d.net < 0 ? "neg" : "flat"}">${d.net > 0 ? "+" : ""}${d.net}</span></div>
       <div class="hbar-track" style="margin-top:4px"><div class="hbar-fill" style="width:${(d.n / rows[0][1].n * 100).toFixed(0)}%;background:var(--blue)"></div></div>
@@ -277,7 +311,7 @@ function renderSide(trades) {
     </div>`).join("")
     : `<div class="empty">No symbols in range.</div>`;
   document.querySelectorAll(".sym-row").forEach(el => {
-    el.onclick = () => { state.symbol = state.symbol === el.dataset.sym ? null : el.dataset.sym; render(); };
+    el.onclick = () => setPreview("symbol", el.dataset.sym);
   });
 }
 
@@ -294,13 +328,13 @@ function renderClusters(trades) {
   const clusters = Object.entries(by).filter(([, d]) => d.traders.size >= 3)
     .sort((a, b) => b[1].traders.size - a[1].traders.size);
   $("clusters").innerHTML = clusters.length ? clusters.map(([s, d]) => `
-    <div class="cluster tap ${state.symbol === s ? "factive" : ""}" data-sym="${esc(s)}"><div class="cs">${esc(s)}</div>
+    <div class="cluster tap ${isPreview("symbol", s) ? "factive" : ""}" data-sym="${esc(s)}"><div class="cs">${esc(s)}</div>
       <div class="cm">${d.traders.size} traders · ${d.n} actions</div>
       <div class="ca net ${d.net > 0 ? "pos" : d.net < 0 ? "neg" : "flat"}">net ${d.net > 0 ? "+" : ""}${d.net}</div>
     </div>`).join("")
     : `<div class="empty">No symbol was traded by 3+ members in this range.</div>`;
   document.querySelectorAll(".cluster").forEach(el => {
-    el.onclick = () => { state.symbol = state.symbol === el.dataset.sym ? null : el.dataset.sym; render(); };
+    el.onclick = () => setPreview("symbol", el.dataset.sym);
   });
 }
 
@@ -320,13 +354,13 @@ function renderOptions(trades) {
   opts.forEach(t => (buckets[expiryBucket(t) || "unstated"]).push(t));
   const max = Math.max(...Object.values(buckets).map(b => b.length), 1);
   $("optionsLens").innerHTML = Object.entries(buckets).map(([k, arr]) => `
-    <div class="opt-bucket tap ${state.obucket === k ? "factive" : ""}" data-obucket="${esc(k)}">
+    <div class="opt-bucket tap ${isPreview("obucket", k) ? "factive" : ""}" data-obucket="${esc(k)}">
       <div class="ob-head"><b>${k}</b><span>${arr.length}</span></div>
       <div class="hbar-track"><div class="hbar-fill" style="width:${(arr.length / max * 100).toFixed(0)}%;background:var(--amber)"></div></div>
       ${arr.slice(0, 4).map(t => `<div class="opt-ex">${esc(t.symbol || "?")} ${esc(t.instrument)}${t.strike ? " $" + t.strike : ""}${t.expiry ? " " + t.expiry : ""} · ${t.action}</div>`).join("")}
     </div>`).join("") || `<div class="empty">No options in range.</div>`;
   document.querySelectorAll(".opt-bucket").forEach(el => {
-    el.onclick = () => { state.obucket = state.obucket === el.dataset.obucket ? null : el.dataset.obucket; render(); };
+    el.onclick = () => setPreview("obucket", el.dataset.obucket);
   });
 }
 function renderPlans() {
@@ -336,15 +370,14 @@ function renderPlans() {
     .filter(t => t.action === "PLAN" && t.day <= state.end && t.day >= cutoff.toISOString().slice(0, 10))
     .sort((a, b) => b.ts - a.ts).slice(0, 8);
   $("plans").innerHTML = plans.length ? plans.map(t => `
-    <div class="plan-row tap ${state.symbol === t.symbol ? "factive" : ""}" data-sym="${esc(t.symbol || "")}"><b>${esc(t.symbol || "—")}</b> <span class="tinst">${esc(instLabel(t))}</span>
+    <div class="plan-row tap ${isPreview("symbol", t.symbol) ? "factive" : ""}" data-sym="${esc(t.symbol || "")}"><b>${esc(t.symbol || "—")}</b> <span class="tinst">${esc(instLabel(t))}</span>
       <div class="tnote">${esc(t.note)}</div>
       <div class="pd">${fmtDay(t.day)} · ${esc(t.trader)}</div></div>`).join("")
     : `<div class="empty">No planned/conditional orders in the last 14 days.</div>`;
   document.querySelectorAll(".plan-row").forEach(el => {
     el.onclick = () => {
       if (!el.dataset.sym) return;
-      state.symbol = state.symbol === el.dataset.sym ? null : el.dataset.sym;
-      render();
+      setPreview("symbol", el.dataset.sym);
       document.querySelector(".tape-panel").scrollIntoView();
     };
   });
@@ -463,6 +496,7 @@ function shift(dir) {
   const [lo, hi] = DATA.day_range;
   if (state.end < lo) state.end = lo;
   if (state.end > hi) state.end = hi;
+  state.preview = null;
   render();
 }
 
@@ -535,7 +569,7 @@ async function init() {
     });
   $("prevBtn").onclick = () => shift(-1);
   $("nextBtn").onclick = () => shift(1);
-  $("todayBtn").onclick = () => { state.end = DATA.day_range[1]; render(); };
+  $("todayBtn").onclick = () => { state.end = DATA.day_range[1]; state.preview = null; render(); };
   render();
 }
 init();
