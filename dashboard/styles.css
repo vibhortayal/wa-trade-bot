@@ -113,6 +113,18 @@ main { max-width: 1180px; margin: 0 auto; padding: 18px 22px 40px; }
 .tc-sub { color: var(--muted); font-size: 12px; font-weight: 400; }
 .tc-row { font-size: 12.5px; margin-top: 4px; }
 .tc-k { color: var(--muted); margin-right: 6px; }
+/* tap-to-filter: every card, row, bar and day is tappable; .factive marks the active filter */
+.tap { cursor: pointer; }
+.tap:active { opacity: .72; }
+.factive { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: 8px; }
+#donutLegend .tap { border-radius: 6px; padding: 1px 5px; margin: -1px -5px; }
+/* tape filter dropdowns (shown when viewing a single trader) */
+.tape-filters { display: flex; gap: 10px; flex-wrap: wrap; margin: 2px 0 10px; }
+.tfilter { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+.tfilter select {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 8px; padding: 8px 10px; font-size: 14px; min-width: 110px;
+}
 .tsym { font-weight: 700; font-size: 14px; }
 .tinst { color: var(--muted); font-size: 12px; }
 .ttrader { color: var(--muted); font-size: 12px; margin-left: auto; }

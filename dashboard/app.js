@@ -1,5 +1,5 @@
 /* Trade Flow dashboard — vanilla JS, hand-rolled SVG */
-const state = { mode: "day", end: null, symbol: null, trader: null, tab: "market", traderSort: "active" };
+const state = { mode: "day", end: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, tab: "market", traderSort: "active" };
 let DATA = null;
 
 const ACTION_COLORS = {
@@ -25,7 +25,26 @@ function windowDays() {
   }
   return days;
 }
-function inRange(t) { return windowDays().includes(t.day) && (!state.symbol || t.symbol === state.symbol) && (!state.trader || t.trader === state.trader); }
+function inRange(t) {
+  return windowDays().includes(t.day)
+    && (!state.symbol || t.symbol === state.symbol)
+    && (!state.trader || t.trader === state.trader)
+    && (!state.instrument || (t.instrument || "other") === state.instrument)
+    && (!state.action || t.action === state.action)
+    && (!state.obucket || (expiryBucket(t) || "unstated") === state.obucket)
+    && (!state.ofav || outcomeClass(t) === state.ofav);
+}
+function clearFilters() { state.symbol = state.trader = state.instrument = state.action = state.obucket = state.ofav = null; }
+function outcomeClass(t) {
+  const o = t.outcome;
+  if (!o || !o.scored) return null;
+  if (o.roundtrip && o.roundtrip.ret != null)
+    return o.roundtrip.ret > 0.01 ? "fav" : o.roundtrip.ret < -0.01 ? "unf" : "flat";
+  if (o.kind === "plan" && o.target != null) return o.tgt_hit ? "fav" : null;
+  if (o.favorable === true) return "fav";
+  if (o.favorable === false) return "unf";
+  return "flat";
+}
 function rangeTrades() { return DATA.trades.filter(inRange); }
 function fmtDay(d) {
   return new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -79,7 +98,7 @@ function donut(counts) {
 function hbars(rows, colorFor) {
   const max = Math.max(...rows.map(r => r[1]), 1);
   return rows.map(([lbl, n]) => `
-    <div class="hbar-row"><span class="lbl">${esc(lbl)}</span>
+    <div class="hbar-row tap" data-lbl="${esc(lbl)}"><span class="lbl">${esc(lbl)}</span>
       <div class="hbar-track"><div class="hbar-fill" style="width:${(n / max * 100).toFixed(1)}%;background:${colorFor(lbl)}"></div></div>
       <span class="num">${n}</span></div>`).join("");
 }
@@ -142,11 +161,40 @@ function renderTape(trades) {
   const bits = [];
   if (state.trader) bits.push(`<b>${esc(state.trader)}</b>`);
   if (state.symbol) bits.push(`<b>${esc(state.symbol)}</b>`);
+  if (state.instrument) bits.push(`<b>${esc(state.instrument)}</b>`);
+  if (state.action) bits.push(`<b>${esc(state.action)}</b>`);
+  if (state.obucket) bits.push(`<b>${esc(state.obucket)}</b>`);
+  if (state.ofav) bits.push(`<b>${state.ofav === "fav" ? "✓ favorable" : state.ofav === "unf" ? "✗ unfavorable" : "– flat"}</b>`);
   if (bits.length) {
     chip.classList.remove("hidden");
     chip.innerHTML = `Filtered: ${bits.join(" · ")} ✕`;
-    chip.onclick = () => { state.symbol = null; state.trader = null; render(); };
+    chip.onclick = () => { clearFilters(); render(); };
   } else chip.classList.add("hidden");
+  renderTapeFilters();
+}
+
+/* filter dropdowns shown on the tape when viewing a single trader */
+function renderTapeFilters() {
+  const wrap = $("tapeFilters");
+  if (!state.trader) { wrap.classList.add("hidden"); wrap.innerHTML = ""; return; }
+  wrap.classList.remove("hidden");
+  const sel = (id, label, opts, cur) => `
+    <label class="tfilter"><span>${label}</span>
+      <select id="${id}">${opts.map(o => `<option value="${o.v}"${o.v === cur ? " selected" : ""}>${o.t}</option>`).join("")}</select>
+    </label>`;
+  wrap.innerHTML =
+    sel("fInst", "Instrument",
+      [{ v: "", t: "All" }].concat(["stock", "call", "put", "spread", "crypto", "other"].map(i => ({ v: i, t: i }))),
+      state.instrument || "") +
+    sel("fAct", "Action",
+      [{ v: "", t: "All" }].concat(["BUY", "ADD", "SELL", "TRIM", "EXIT", "PLAN", "HOLD", "WATCH"].map(a => ({ v: a, t: a }))),
+      state.action || "") +
+    sel("fOc", "Outcome",
+      [{ v: "", t: "All" }, { v: "fav", t: "✓ favorable" }, { v: "unf", t: "✗ unfavorable" }, { v: "flat", t: "– flat" }],
+      state.ofav || "");
+  $("fInst").onchange = e => { state.instrument = e.target.value || null; render(); };
+  $("fAct").onchange = e => { state.action = e.target.value || null; render(); };
+  $("fOc").onchange = e => { state.ofav = e.target.value || null; render(); };
 }
 
 /* ---------- side panels ---------- */
@@ -155,13 +203,20 @@ function renderSide(trades) {
   trades.forEach(t => { const k = t.instrument || "other"; inst[k] = (inst[k] || 0) + 1; });
   $("donut").innerHTML = donut(inst);
   $("donutLegend").innerHTML = Object.entries(inst).sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => `<span><span class="dot" style="background:${INST_COLORS[k] || INST_COLORS.other}"></span>${k} · ${v}</span>`).join("");
+    .map(([k, v]) => `<span class="tap ${state.instrument === k ? "factive" : ""}" data-inst="${esc(k)}"><span class="dot" style="background:${INST_COLORS[k] || INST_COLORS.other}"></span>${k} · ${v}</span>`).join("");
+  document.querySelectorAll("#donutLegend .tap").forEach(el => {
+    el.onclick = () => { state.instrument = state.instrument === el.dataset.inst ? null : el.dataset.inst; render(); };
+  });
 
   const acts = {};
   trades.forEach(t => { acts[t.action] = (acts[t.action] || 0) + 1; });
   $("actionBars").innerHTML = hbars(
     Object.entries(acts).sort((a, b) => b[1] - a[1]),
     lbl => ACTION_COLORS[lbl] || "#8a94a6");
+  document.querySelectorAll("#actionBars .hbar-row").forEach(el => {
+    el.classList.toggle("factive", state.action === el.dataset.lbl);
+    el.onclick = () => { state.action = state.action === el.dataset.lbl ? null : el.dataset.lbl; render(); };
+  });
 
   const sym = {};
   trades.forEach(t => {
@@ -198,11 +253,14 @@ function renderClusters(trades) {
   const clusters = Object.entries(by).filter(([, d]) => d.traders.size >= 3)
     .sort((a, b) => b[1].traders.size - a[1].traders.size);
   $("clusters").innerHTML = clusters.length ? clusters.map(([s, d]) => `
-    <div class="cluster"><div class="cs">${esc(s)}</div>
+    <div class="cluster tap ${state.symbol === s ? "factive" : ""}" data-sym="${esc(s)}"><div class="cs">${esc(s)}</div>
       <div class="cm">${d.traders.size} traders · ${d.n} actions</div>
       <div class="ca net ${d.net > 0 ? "pos" : d.net < 0 ? "neg" : "flat"}">net ${d.net > 0 ? "+" : ""}${d.net}</div>
     </div>`).join("")
     : `<div class="empty">No symbol was traded by 3+ members in this range.</div>`;
+  document.querySelectorAll(".cluster").forEach(el => {
+    el.onclick = () => { state.symbol = state.symbol === el.dataset.sym ? null : el.dataset.sym; render(); };
+  });
 }
 
 /* ---------- options lens & plans ---------- */
@@ -221,11 +279,14 @@ function renderOptions(trades) {
   opts.forEach(t => (buckets[expiryBucket(t) || "unstated"]).push(t));
   const max = Math.max(...Object.values(buckets).map(b => b.length), 1);
   $("optionsLens").innerHTML = Object.entries(buckets).map(([k, arr]) => `
-    <div class="opt-bucket">
+    <div class="opt-bucket tap ${state.obucket === k ? "factive" : ""}" data-obucket="${esc(k)}">
       <div class="ob-head"><b>${k}</b><span>${arr.length}</span></div>
       <div class="hbar-track"><div class="hbar-fill" style="width:${(arr.length / max * 100).toFixed(0)}%;background:var(--amber)"></div></div>
       ${arr.slice(0, 4).map(t => `<div class="opt-ex">${esc(t.symbol || "?")} ${esc(t.instrument)}${t.strike ? " $" + t.strike : ""}${t.expiry ? " " + t.expiry : ""} · ${t.action}</div>`).join("")}
     </div>`).join("") || `<div class="empty">No options in range.</div>`;
+  document.querySelectorAll(".opt-bucket").forEach(el => {
+    el.onclick = () => { state.obucket = state.obucket === el.dataset.obucket ? null : el.dataset.obucket; render(); };
+  });
 }
 function renderPlans() {
   const endD = new Date(state.end + "T12:00:00");
@@ -234,10 +295,18 @@ function renderPlans() {
     .filter(t => t.action === "PLAN" && t.day <= state.end && t.day >= cutoff.toISOString().slice(0, 10))
     .sort((a, b) => b.ts - a.ts).slice(0, 8);
   $("plans").innerHTML = plans.length ? plans.map(t => `
-    <div class="plan-row"><b>${esc(t.symbol || "—")}</b> <span class="tinst">${esc(instLabel(t))}</span>
+    <div class="plan-row tap ${state.symbol === t.symbol ? "factive" : ""}" data-sym="${esc(t.symbol || "")}"><b>${esc(t.symbol || "—")}</b> <span class="tinst">${esc(instLabel(t))}</span>
       <div class="tnote">${esc(t.note)}</div>
       <div class="pd">${fmtDay(t.day)} · ${esc(t.trader)}</div></div>`).join("")
     : `<div class="empty">No planned/conditional orders in the last 14 days.</div>`;
+  document.querySelectorAll(".plan-row").forEach(el => {
+    el.onclick = () => {
+      if (!el.dataset.sym) return;
+      state.symbol = state.symbol === el.dataset.sym ? null : el.dataset.sym;
+      render();
+      document.querySelector(".tape-panel").scrollIntoView();
+    };
+  });
 }
 
 /* ---------- heatmap ---------- */
@@ -250,9 +319,15 @@ function renderHeatmap() {
     const d = new Date(endD); d.setDate(d.getDate() - i);
     const key = d.toISOString().slice(0, 10), n = counts[key] || 0;
     const a = n === 0 ? 0 : Math.min(0.25 + n / 12, 1);
-    cells.push(`<div class="hm-cell" data-tip="${fmtDay(key)} · ${n}" style="background:rgba(38,166,154,${a.toFixed(2)})"></div>`);
+    cells.push(`<div class="hm-cell tap" data-day="${key}" data-tip="${fmtDay(key)} · ${n}" style="background:rgba(38,166,154,${a.toFixed(2)})"></div>`);
   }
   $("heatmap").innerHTML = cells.join("");
+  document.querySelectorAll(".hm-cell").forEach(el => {
+    el.onclick = () => {
+      state.mode = "day"; state.end = el.dataset.day; clearFilters(); render();
+      window.scrollTo(0, 0);
+    };
+  });
 }
 
 /* ---------- traders tab ---------- */
@@ -407,7 +482,7 @@ async function init() {
   });
   $("generated").textContent = "data through " + fmtDay(DATA.day_range[1]) + (DATA.live ? " · live" : "");
   document.querySelectorAll("#rangeSeg button").forEach(b =>
-    b.onclick = () => { state.mode = b.dataset.mode; state.symbol = null; state.trader = null; render(); });
+    b.onclick = () => { state.mode = b.dataset.mode; clearFilters(); render(); });
   document.querySelectorAll("#tabSeg button").forEach(b =>
     b.onclick = () => { state.tab = b.dataset.tab; render(); });
   document.querySelectorAll("#traderSortSeg button").forEach(b =>
