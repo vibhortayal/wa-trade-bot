@@ -296,8 +296,19 @@ function renderSliceSummary(trades) {
     bits.unshift(`<b>${opens}</b> opens · <b>${closes}</b> closes`);
   }
   wrap.innerHTML = `<div class="ss-label">${esc(label)}${isPrev ? ` <button id="ssX" class="ss-x" aria-label="dismiss">✕</button>` : ""}</div>` +
-    `<div class="ss-stats">${bits.join("<span class='ss-dot'>·</span>")}</div>`;
+    `<div class="ss-stats">${bits.join("<span class='ss-dot'>·</span>")}` +
+    (isPrev && ["symbol", "instrument", "action"].includes(p.kind) ? `<button id="ssFilter" class="ss-filter">Filter tape</button>` : "") +
+    `</div>`;
   if (isPrev) $("ssX").onclick = e => { e.stopPropagation(); state.preview = null; render(); };
+  const fb = $("ssFilter");
+  if (fb) fb.onclick = e => {
+    e.stopPropagation();
+    if (p.kind === "symbol") state.symbol = p.value;
+    if (p.kind === "instrument") state.instrument = p.value;
+    if (p.kind === "action") state.action = p.value;
+    state.preview = null;
+    render();
+  };
 }
 
 /* ---------- side panels ---------- */
