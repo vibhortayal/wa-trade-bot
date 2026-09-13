@@ -1,5 +1,5 @@
 /* Trade Flow dashboard — vanilla JS, hand-rolled SVG */
-const state = { mode: "day", end: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, showFilters: false, showPlans: false, showHeatmap: false, tab: "market", traderSort: "active" };
+const state = { mode: "week", end: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, showFilters: false, showPlans: false, showHeatmap: false, tab: "market", traderSort: "active" };
 let DATA = null;
 
 const ACTION_COLORS = {
