@@ -171,18 +171,23 @@ function renderTape(trades) {
     chip.onclick = () => { clearFilters(); render(); };
   } else chip.classList.add("hidden");
   renderTapeFilters();
+  renderSliceSummary(trades);
 }
 
-/* filter dropdowns shown on the tape when viewing a single trader */
+/* filter dropdowns on the tape — always visible on the Market tab */
 function renderTapeFilters() {
   const wrap = $("tapeFilters");
-  if (!state.trader) { wrap.classList.add("hidden"); wrap.innerHTML = ""; return; }
   wrap.classList.remove("hidden");
+  const traders = [...new Set(DATA.trades.map(t => t.trader))]
+    .sort((a, b) => a === "You" ? -1 : b === "You" ? 1 : a.localeCompare(b, undefined, { numeric: true }));
   const sel = (id, label, opts, cur) => `
     <label class="tfilter"><span>${label}</span>
       <select id="${id}">${opts.map(o => `<option value="${o.v}"${o.v === cur ? " selected" : ""}>${o.t}</option>`).join("")}</select>
     </label>`;
   wrap.innerHTML =
+    sel("fTrader", "Trader",
+      [{ v: "", t: "All" }].concat(traders.map(x => ({ v: x, t: x }))),
+      state.trader || "") +
     sel("fInst", "Instrument",
       [{ v: "", t: "All" }].concat(["stock", "call", "put", "spread", "crypto", "other"].map(i => ({ v: i, t: i }))),
       state.instrument || "") +
@@ -192,9 +197,45 @@ function renderTapeFilters() {
     sel("fOc", "Outcome",
       [{ v: "", t: "All" }, { v: "fav", t: "✓ favorable" }, { v: "unf", t: "✗ unfavorable" }, { v: "flat", t: "– flat" }],
       state.ofav || "");
+  $("fTrader").onchange = e => { state.trader = e.target.value || null; render(); };
   $("fInst").onchange = e => { state.instrument = e.target.value || null; render(); };
   $("fAct").onchange = e => { state.action = e.target.value || null; render(); };
   $("fOc").onchange = e => { state.ofav = e.target.value || null; render(); };
+}
+
+/* summary of whatever slice the filters/taps selected — the "more data" for a tap */
+function renderSliceSummary(trades) {
+  const wrap = $("sliceSummary");
+  const anyFilter = state.symbol || state.trader || state.instrument || state.action || state.obucket || state.ofav;
+  if (!anyFilter) { wrap.classList.add("hidden"); wrap.innerHTML = ""; return; }
+  wrap.classList.remove("hidden");
+  const traders = new Set();
+  let fav = 0, unf = 0, flat = 0, rt = 0, tgtHit = 0, tgt = 0;
+  const rets = [];
+  trades.forEach(t => {
+    traders.add(t.trader);
+    const c = outcomeClass(t);
+    if (!c) return;
+    if (c === "fav") fav++; else if (c === "unf") unf++; else flat++;
+    const o = t.outcome;
+    const r = (o.roundtrip && o.roundtrip.ret != null) ? o.roundtrip.ret : o.ret;
+    if (r != null) rets.push(r);
+    if (o.roundtrip && o.roundtrip.ret != null) rt++;
+    if (o.kind === "plan" && o.target != null) { tgt++; if (o.tgt_hit) tgtHit++; }
+  });
+  const scored = fav + unf + flat;
+  const avg = rets.length ? rets.reduce((a, b) => a + b, 0) / rets.length : null;
+  const label = [state.trader, state.symbol, state.instrument, state.action, state.obucket,
+    state.ofav === "fav" ? "✓ favorable" : state.ofav === "unf" ? "✗ unfavorable" : state.ofav === "flat" ? "– flat" : null
+  ].filter(Boolean).join(" · ");
+  const bits = [`<b>${trades.length}</b> action${trades.length === 1 ? "" : "s"}`];
+  if (!state.trader) bits.push(`<b>${traders.size}</b> trader${traders.size === 1 ? "" : "s"}`);
+  if (scored) bits.push(`${fav} ✓ · ${unf} ✗ · ${flat} – <span class="tc-sub">of ${scored} scored</span>`);
+  if (fav + unf) bits.push(`hit rate <b>${Math.round(fav / (fav + unf) * 100)}%</b>`);
+  if (avg != null) bits.push(`avg move <b style="color:${avg >= 0 ? "var(--green)" : "var(--red)"}">${pctStr(avg)}</b>`);
+  if (rt) bits.push(`<b>${rt}</b> round trip${rt === 1 ? "" : "s"} closed`);
+  if (tgt) bits.push(`<b>${tgtHit}/${tgt}</b> targets hit`);
+  wrap.innerHTML = `<div class="ss-label">${esc(label)}</div><div class="ss-stats">${bits.join("<span class='ss-dot'>·</span>")}</div>`;
 }
 
 /* ---------- side panels ---------- */
