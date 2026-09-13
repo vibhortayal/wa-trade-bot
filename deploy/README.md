@@ -1,0 +1,65 @@
+# Trade Flow bot — self-hosted setup
+
+Runs the WhatsApp reader → Gemini parser → Supabase pipeline on your own
+(free) VM. The dashboard at **wa-trade-flow.vercel.app** then pulls live data
+from Supabase instead of the baked-in static JSON.
+
+## What runs where
+
+| Piece | Where | Notes |
+|---|---|---|
+| `server.js` + `public/` | your VM, port 3001 | setup UI: pairing code, keys, status, manual runs |
+| `run-cycle.sh` | systemd timer, hourly | pull → parse → push (skips 22:00–06:00 PT) |
+| `wa_trades` / `wa_meta` | Supabase | anonymized actions only; anon key is read-only via RLS |
+| dashboard | Vercel | reads Supabase live, falls back to static JSON |
+
+## 1. Create the free VM (Oracle Cloud, ~10 min)
+
+1. Sign up at [cloud.oracle.com](https://cloud.oracle.com) (credit card required for
+   verification; the Always Free tier itself costs nothing).
+2. Create a Compute instance:
+   - **Image:** Ubuntu 24.04
+   - **Shape:** Ampere A1 (ARM) — 4 OCPUs / 24 GB RAM (Always Free eligible)
+   - Add your SSH public key; note the **public IP**.
+3. In the instance's subnet **security list**, add an ingress rule:
+   TCP, source `0.0.0.0/0`, destination port **3001**.
+
+## 2. Get three keys (~5 min)
+
+- **Gemini API key** (free): [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- **Supabase project URL + service_role key**: Supabase dashboard →
+  Project Settings → API. (You already have a project from Brewlog.)
+- **Supabase schema**: in the Supabase dashboard open the **SQL Editor**,
+  paste the contents of `supabase/schema.sql` from this repo, and run it once.
+  This creates `wa_trades` + `wa_meta` with public read-only access.
+
+## 3. Install the bot (~10 min)
+
+```bash
+# on your laptop: copy this project to the VM (or git clone a private repo)
+scp -r ~/workspace/wa-trade-reader ubuntu@<vm-ip>:~/wa-trade-bot
+
+ssh ubuntu@<vm-ip>
+bash ~/wa-trade-bot/deploy/install.sh   # installs node, deps, systemd units; asks for a UI password
+```
+
+Then open **http://\<vm-ip\>:3001**, log in with the password you chose, and:
+
+1. **Link WhatsApp** — enter your phone number, get the pairing code, type it
+   into WhatsApp → Settings → Linked devices → *Link with phone number instead*.
+2. **Save keys** — paste the Gemini key, Supabase URL, and service_role key.
+3. **Run a cycle now** — first pull takes a few minutes (chat history sync).
+
+The hourly timer takes over from there. The dashboard switches to live data
+automatically once rows land in Supabase (set the anon key in
+`wa-trade-dashboard/supabase-config.js` and redeploy the dashboard).
+
+## Notes
+
+- **Privacy**: raw WhatsApp messages, names, and phone numbers never leave the VM.
+  Only pseudonymized trade actions (`You`, `Trader 01`…) are pushed to Supabase.
+- **WhatsApp risk**: this uses an unofficial automation library via a linked
+  device — same tradeoff as before, now on hardware you control.
+- **Local dev**: `node server.js` runs the UI on `127.0.0.1:3001` with no auth;
+  set `USE_PROXY=1` on Hatch, leave unset on the VM.
+- **Logs**: `~/wa-trade-bot/logs/cycle.log`, or `journalctl -u wa-trade-bot-cycle`.

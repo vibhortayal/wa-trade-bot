@@ -1,0 +1,9 @@
+[Unit]
+Description=Trade Flow hourly pull -> parse -> push cycle
+
+[Service]
+Type=oneshot
+WorkingDirectory=%HOME%/wa-trade-bot
+ExecStart=/bin/bash %HOME%/wa-trade-bot/run-cycle.sh
+StandardOutput=append:%HOME%/wa-trade-bot/logs/cycle.log
+StandardError=append:%HOME%/wa-trade-bot/logs/cycle.log

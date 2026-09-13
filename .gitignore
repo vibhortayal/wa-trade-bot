@@ -1,0 +1,10 @@
+# Secrets & auth (never commit)
+.env
+.wwebjs_auth/
+
+# Private data: raw WhatsApp messages, sender pseudonym map, parse output
+data/
+logs/
+
+# Deps
+node_modules/

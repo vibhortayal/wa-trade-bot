@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trade Flow Bot — Setup</title>
+<style>
+  :root { --bg:#0b0e14; --panel:#131722; --line:#232b3d; --text:#dfe5ef; --muted:#8a94a6;
+          --green:#26a69a; --red:#ef5350; --blue:#4f7cff; --amber:#ffb300; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,"Segoe UI",sans-serif;
+         font-size:14px; }
+  main { max-width:720px; margin:0 auto; padding:24px 18px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+          padding:18px; margin-bottom:16px; }
+  .card h2 { margin:0 0 12px; font-size:13px; text-transform:uppercase;
+             letter-spacing:.8px; color:var(--muted); }
+  .row { display:flex; justify-content:space-between; padding:6px 0;
+         border-bottom:1px solid var(--line); }
+  .row:last-child { border-bottom:none; }
+  .k { color:var(--muted); } .v { font-weight:600; }
+  .ok { color:var(--green); } .bad { color:var(--red); } .warn { color:var(--amber); }
+  label { display:block; color:var(--muted); font-size:12px; margin:10px 0 4px; }
+  input { width:100%; background:#0e1219; border:1px solid var(--line); color:var(--text);
+          border-radius:8px; padding:9px 12px; font-size:14px; }
+  button { background:var(--blue); border:none; color:#fff; border-radius:8px;
+           padding:9px 18px; font-size:14px; cursor:pointer; margin-top:12px; }
+  button:disabled { opacity:.4; cursor:default; }
+  button.secondary { background:#1a2030; border:1px solid var(--line); }
+  .code { font-size:34px; font-weight:800; letter-spacing:6px; text-align:center;
+          background:#0e1219; border:1px dashed var(--amber); border-radius:10px;
+          padding:16px; margin-top:12px; }
+  .hint { color:var(--muted); font-size:12.5px; margin-top:10px; line-height:1.5; }
+  #log { background:#0e1219; border:1px solid var(--line); border-radius:8px;
+         padding:12px; font-family:ui-monospace,monospace; font-size:11.5px;
+         white-space:pre-wrap; max-height:300px; overflow-y:auto; color:#aeb8cc; }
+  .msg { margin-top:10px; font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>◈ Trade Flow Bot</h1>
+  <p class="sub">WhatsApp reader → Gemini parser → Supabase → dashboard</p>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div id="status"><div class="row"><span class="k">loading…</span></div></div>
+  </div>
+
+  <div class="card">
+    <h2>1 · Link WhatsApp</h2>
+    <div id="pairBox">
+      <label>Phone number with country code (digits only)</label>
+      <input id="phone" placeholder="14155551234" inputmode="numeric">
+      <button id="pairBtn">Get pairing code</button>
+      <div id="pairOut"></div>
+      <p class="hint">One-time step. After the code appears, on your phone go to
+      WhatsApp → Settings → Linked devices → <b>Link a device</b> →
+      <b>Link with phone number instead</b>, and type the code. This page will
+      show “linked” once pairing completes.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2 · API keys</h2>
+    <label>Gemini API key <span class="hint" style="display:inline">(<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--blue)">get one free at Google AI Studio</a>)</span></label>
+    <input id="geminiKey" type="password" placeholder="AIza…" autocomplete="off">
+    <label>Supabase project URL</label>
+    <input id="sbUrl" placeholder="https://xyz.supabase.co" autocomplete="off">
+    <label>Supabase service_role key <span class="hint" style="display:inline">(server-side only — never leaves this box)</span></label>
+    <input id="sbKey" type="password" placeholder="eyJ…" autocomplete="off">
+    <button id="saveKeys">Save keys</button>
+    <div id="keysMsg" class="msg"></div>
+    <p class="hint">Keys are written to a <b>.env</b> file on this machine (readable only by the bot).
+    They are never displayed again and never sent anywhere except Google's and Supabase's APIs.</p>
+  </div>
+
+  <div class="card">
+    <h2>3 · Run</h2>
+    <button id="runBtn" class="secondary">Run a cycle now</button>
+    <span id="runMsg" class="msg"></span>
+    <p class="hint">Pulls new WhatsApp messages, parses them with Gemini, and pushes
+    anonymized trades to Supabase. Also runs automatically every hour (06:00–22:00).</p>
+  </div>
+
+  <div class="card">
+    <h2>Log</h2>
+    <div id="log">…</div>
+    <button id="refreshLog" class="secondary">Refresh</button>
+  </div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+parsing 181 messages with text...
+  resuming: 88 already parsed
+  101/181...
+Traceback (most recent call last):
+  File "/home/hatch/workspace/wa-trade-reader/parse-trades.py", line 104, in <module>
+    main()
+  File "/home/hatch/workspace/wa-trade-reader/parse-trades.py", line 88, in main
+    res = call_gemini(chunk)
+          ^^^^^^^^^^^^^^^^^^
+  File "/home/hatch/workspace/wa-trade-reader/parse-trades.py", line 51, in call_gemini
+    raise RuntimeError("gemini failed: " + last_err)
+RuntimeError: gemini failed: self.parent.error(
+               ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 559, in error
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 639, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 400: Bad Request
+ / 
+parsing 181 messages with text...
+  resuming: 105 already parsed
+    rate-limited, waiting 5s (attempt 1)...
+  121/181...
+  141/181...
+  161/181...
+  181/181...
+  181/181 done
+DONE: 91 trade actions in 76 messages -> /home/hatch/workspace/wa-trade-reader/data/trades.json

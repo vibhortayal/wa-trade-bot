@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""Extract structured trades from WhatsApp messages via Gemini."""
+import json, subprocess, sys, os
+from datetime import datetime, timezone
+
+GEMINI = os.path.expanduser("~/workspace/skills/google-gemini/bin/gemini.py")
+DATA = os.path.expanduser("~/workspace/wa-trade-reader/data")
+# Self-hosted mode: use a personal Gemini API key directly (set GEMINI_API_KEY).
+# Otherwise falls back to the Hatch google-gemini skill CLI.
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+
+PROMPT = """You parse WhatsApp trading-group messages into structured trade records. Today is 2026-09-13.
+
+INPUT: a JSON array of messages. Each has id, date (YYYY-MM-DD), sender, text, and optionally quoted (the message being replied to, with its own sender/date/text).
+
+TASK: For each message, decide if it describes a TRADE ACTION by the sender (opening, adding to, trimming, closing a position; stating a held position; a conditional/planned order). Extract one record per distinct action in the message.
+
+Rules:
+- Use the quoted reply for context: fragments like "2028 Jan", "yes", "trimmed 10%" only make sense with the quoted message. If the quoted text lets you resolve the symbol/instrument, do so and say so in "context_used".
+- DO NOT extract from questions ("Any trade for ORCL?"), news, jokes, reactions ("Thank you 🙏"), or someone describing another person's trade. Those are no_trade.
+- NEVER invent details. Missing symbol/strike/expiry/price -> null. If a value is ambiguous (e.g. "12/17" could be Dec 2026 or 2027), pick the most plausible given date context but set confidence to "low" and explain in "note".
+- GROUNDING RULE (strict): the symbol MUST appear in THIS message or its quoted reply — verbatim as a ticker ($META, META), or as an unambiguous company name ("Amazon"->AMZN, "Rubrik"->RBRK, "Bitcoin"/$BTC->BTC). If the symbol appears nowhere in the message+quote, set symbol to null and confidence to "low", and say what is missing in "note". NEVER borrow a symbol from any other message.
+- "Added $META $670 C Dec 27 @ 76.60" = BUY call, symbol META, strike 670, expiry 2027-12, premium 76.60.
+- "Commons"/"shares" = stock. "leaps" = long-dated calls. "140p 10/16" = put, strike 140, expiry Oct 16. Crypto like BTC counts as a trade with instrument "crypto".
+- action: one of BUY, ADD, SELL, TRIM, EXIT, HOLD, PLAN (conditional/planned), WATCH (mentions watching, no position).
+- confidence: high / medium / low.
+
+OUTPUT: a JSON array, one object per input message, in the same order:
+{"id": "<message id>", "no_trade": true|false, "trades": [ {"action": "...", "symbol": "..."|null, "instrument": "stock"|"call"|"put"|"spread"|"crypto"|null, "strike": number|null, "expiry": "YYYY-MM"|null, "price": number|null, "quantity": "..."|null, "confidence": "high"|"medium"|"low", "note": "...", "context_used": true|false} ], "note": "..." }
+Return ONLY the JSON array, no other text.
+
+MESSAGES:
+"""
+
+def call_gemini_rest(payload):
+    """Direct Gemini API call using GEMINI_API_KEY (self-hosted mode)."""
+    import urllib.request, urllib.error
+    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+           f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}")
+    body = json.dumps({
+        "contents": [{"parts": [{"text": payload}]}],
+        "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
+    }).encode()
+    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            resp = json.load(r)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"HTTP {e.code}: {e.read().decode()[:200]}")
+    text = resp["candidates"][0]["content"]["parts"][0]["text"].strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0]
+    return json.loads(text)
+
+
+def call_gemini(batch, tries=6):
+    payload = PROMPT + json.dumps(batch, ensure_ascii=False)
+    last_err = None
+    for attempt in range(tries):
+        try:
+            if GEMINI_API_KEY:
+                return call_gemini_rest(payload)
+            p = subprocess.run([sys.executable, GEMINI, "--json", "--temperature", "0.1"],
+                               input=payload.encode(), capture_output=True, timeout=300)
+        except Exception as e:
+            last_err = f"{type(e).__name__}: {e}"
+            if "HTTP 400" in last_err:
+                raise RuntimeError("gemini failed: " + last_err)
+            wait = min(2 ** attempt * 5, 120)
+            print(f"    transport error, waiting {wait}s (attempt {attempt+1})...", flush=True)
+            import time; time.sleep(wait)
+            continue
+        out = p.stdout.decode().strip()
+        if p.returncode == 0:
+            # strip any markdown fences just in case
+            if out.startswith("```"):
+                out = out.split("\n", 1)[1].rsplit("```", 1)[0]
+            return json.loads(out)
+        last_err = p.stderr.decode()[-500:] + " / " + out[:300]
+        # retry on rate limits / transient server errors
+        if any(s in last_err for s in ("429", "500", "503", "400", "ResourceExhausted")):
+            wait = min(2 ** attempt * 5, 120)
+            print(f"    rate-limited, waiting {wait}s (attempt {attempt+1})...", flush=True)
+            import time; time.sleep(wait)
+            continue
+        raise RuntimeError("gemini failed: " + last_err)
+    raise RuntimeError(f"gemini failed after {tries} tries: " + (last_err or ""))
+
+def main():
+    msgs = [json.loads(l) for l in open(f"{DATA}/messages.jsonl") if l.strip()]
+    batch_msgs = []
+    for idx, m in enumerate(msgs):
+        if not m.get("body"):
+            continue
+        item = {"id": f"msg-{idx}", "date": datetime.fromtimestamp(int(m["t"]), tz=timezone.utc).strftime("%Y-%m-%d"),
+                "sender": m.get("senderName"), "text": m["body"]}
+        if m.get("quoted") and m["quoted"].get("body"):
+            item["quoted"] = {"sender": m["quoted"].get("senderId"), "text": m["quoted"]["body"]}
+        batch_msgs.append(item)
+
+    print(f"parsing {len(batch_msgs)} messages with text...", flush=True)
+    results = []
+    B = 1
+    done_ids = set()
+    # resume from checkpoint if present
+    ckpt_path = f"{DATA}/trades.json"
+    if os.path.exists(ckpt_path):
+        try:
+            prev = json.load(open(ckpt_path))
+            if isinstance(prev, list) and prev and all("id" in r for r in prev):
+                results = prev
+                done_ids = {r["id"] for r in prev}
+                print(f"  resuming: {len(done_ids)} already parsed", flush=True)
+        except Exception:
+            pass
+    import time
+    for i in range(0, len(batch_msgs), B):
+        chunk = batch_msgs[i:i+B]
+        if chunk[0]["id"] in done_ids:
+            continue
+        if (i // B) % 20 == 0:
+            print(f"  {i+1}/{len(batch_msgs)}...", flush=True)
+        try:
+            res = call_gemini(chunk)
+            assert len(res) == len(chunk), f"count mismatch: {len(res)} vs {len(chunk)}"
+        except Exception as e:
+            results.append({"id": chunk[0]["id"], "no_trade": True, "trades": [],
+                            "note": f"PARSE_FAILED: {e}"[:300]})
+            done_ids.add(chunk[0]["id"])
+            with open(ckpt_path, "w") as f:
+                json.dump(results, f, indent=1, ensure_ascii=False)
+            print(f"    parse failed for {chunk[0]['id']}: {e}", flush=True)
+            time.sleep(4)
+            continue
+        results.extend(res)
+        done_ids.update(r["id"] for r in res)
+        with open(ckpt_path, "w") as f:
+            json.dump(results, f, indent=1, ensure_ascii=False)
+        time.sleep(4)  # stay under free-tier RPM
+    print(f"  {len(batch_msgs)}/{len(batch_msgs)} done", flush=True)
+
+    with open(f"{DATA}/trades.json", "w") as f:
+        json.dump(results, f, indent=1, ensure_ascii=False)
+    n_trades = sum(len(r.get("trades", [])) for r in results)
+    n_msgs = sum(1 for r in results if r.get("trades"))
+    print(f"DONE: {n_trades} trade actions in {n_msgs} messages -> {DATA}/trades.json")
+
+if __name__ == "__main__":
+    main()
