@@ -3,110 +3,155 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Trade Flow Bot — Setup</title>
-<style>
-  :root { --bg:#0b0e14; --panel:#131722; --line:#232b3d; --text:#dfe5ef; --muted:#8a94a6;
-          --green:#26a69a; --red:#ef5350; --blue:#4f7cff; --amber:#ffb300; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--text);
-         font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,"Segoe UI",sans-serif;
-         font-size:14px; }
-  main { max-width:720px; margin:0 auto; padding:24px 18px 60px; }
-  h1 { font-size:22px; margin:0 0 4px; }
-  .sub { color:var(--muted); margin:0 0 20px; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px;
-          padding:18px; margin-bottom:16px; }
-  .card h2 { margin:0 0 12px; font-size:13px; text-transform:uppercase;
-             letter-spacing:.8px; color:var(--muted); }
-  .row { display:flex; justify-content:space-between; padding:6px 0;
-         border-bottom:1px solid var(--line); }
-  .row:last-child { border-bottom:none; }
-  .k { color:var(--muted); } .v { font-weight:600; }
-  .ok { color:var(--green); } .bad { color:var(--red); } .warn { color:var(--amber); }
-  label { display:block; color:var(--muted); font-size:12px; margin:10px 0 4px; }
-  input { width:100%; background:#0e1219; border:1px solid var(--line); color:var(--text);
-          border-radius:8px; padding:9px 12px; font-size:14px; }
-  button { background:var(--blue); border:none; color:#fff; border-radius:8px;
-           padding:9px 18px; font-size:14px; cursor:pointer; margin-top:12px; }
-  button:disabled { opacity:.4; cursor:default; }
-  button.secondary { background:#1a2030; border:1px solid var(--line); }
-  .code { font-size:34px; font-weight:800; letter-spacing:6px; text-align:center;
-          background:#0e1219; border:1px dashed var(--amber); border-radius:10px;
-          padding:16px; margin-top:12px; }
-  .hint { color:var(--muted); font-size:12.5px; margin-top:10px; line-height:1.5; }
-  #log { background:#0e1219; border:1px solid var(--line); border-radius:8px;
-         padding:12px; font-family:ui-monospace,monospace; font-size:11.5px;
-         white-space:pre-wrap; max-height:300px; overflow-y:auto; color:#aeb8cc; }
-  .msg { margin-top:10px; font-size:13px; }
-</style>
+<title>Trade Flow — Group Activity</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">◈</div>
+    <div>
+      <h1>Trade Flow</h1>
+      <p>What the group traded · updates hourly <span class="tip tip-below" data-tip="A bot reads the group chat every hour (6am–10pm PT) and extracts the trades people mention. Everyone is anonymous.">i</span></p>
+    </div>
+  </div>
+  <div class="controls">
+    <button id="guideBtn" class="ghost">How to read this</button>
+    <div class="seg" id="rangeSeg">
+      <button data-mode="day" class="active">Day</button>
+      <button data-mode="week">Week</button>
+      <button data-mode="month">Month</button>
+    </div>
+    <span class="tip tip-below" data-tip="Time window: a single day, a 7-day week, or a 30-day month, ending on the date shown.">i</span>
+    <div class="datenav">
+      <button id="prevBtn" title="Previous">◀</button>
+      <span id="dateLabel">–</span>
+      <button id="nextBtn" title="Next">▶</button>
+      <button id="todayBtn" class="ghost">Latest</button>
+    </div>
+    <span class="tip tip-below" data-tip="Step the window back or forward in time. “Latest” jumps back to the most recent data.">i</span>
+  </div>
+</header>
+
+<section id="guide" class="panel guide hidden">
+  <div class="guide-head">
+    <h2>How to read this page</h2>
+    <button id="guideClose" class="ghost">Got it ✕</button>
+  </div>
+  <p class="guide-intro">Every hour, a bot reads the trading group chat and pulls out the actual
+  trades people mention — buys, sells, options, plans. Everyone is anonymous
+  (<i>Trader 01, Trader 02…</i>): no names, no message text, just the trade itself.</p>
+  <dl class="guide-defs">
+    <div><dt>Trade tape</dt><dd>Every action mentioned, in time order. The colored word is what they did:
+      <b>BUY</b> opened · <b>ADD</b> added to one · <b>SELL</b> sold ·
+      <b>TRIM</b> sold part of it · <b>EXIT</b> closed it completely ·
+      <b>PLAN</b> “I'll buy if…” · <b>HOLD / WATCH</b> sitting tight.</dd></div>
+    <div><dt>Tap a card</dt><dd>Tap anything for a popup with its numbers — actions, the ✓/✗/– record,
+      hit rate, average move. Where a filter fits, the popup offers a "Filter tape" button.
+      Tapping never changes the page on its own.</dd></div>
+    <div><dt>Outcome badge</dt><dd>How the trade did over the next <b>5 trading days</b>:
+      <b>✓</b> moved in the trade's favor · <b>✗</b> moved against ·
+      <b>–</b> stayed flat (within 1%). For options it scores the <i>stock's</i>
+      direction, not the contract's profit. Tap any badge for details.</dd></div>
+    <div><dt>The dot</dt><dd>How sure the bot is it read the message correctly —
+      <span class="conf high"></span> sure · <span class="conf medium"></span> maybe ·
+      <span class="conf low"></span> shaky.</dd></div>
+  </dl>
+</section>
+
 <main>
-  <h1>◈ Trade Flow Bot</h1>
-  <p class="sub">WhatsApp reader → Gemini parser → TradingView scoring → Supabase → dashboard</p>
-
-  <div class="card">
-    <h2>Status</h2>
-    <div id="status"><div class="row"><span class="k">loading…</span></div></div>
+  <div class="seg" id="tabSeg" style="width:max-content;margin-bottom:14px">
+    <button data-tab="market" class="active">Market</button>
+    <button data-tab="traders">Traders</button>
   </div>
 
-  <div class="card">
-    <h2>1 · Link WhatsApp</h2>
-    <div id="pairBox">
-      <label>Phone number with country code (digits only)</label>
-      <input id="phone" placeholder="14155551234" inputmode="numeric">
-      <button id="pairBtn">Get pairing code</button>
-      <div id="pairOut"></div>
-      <p class="hint">One-time step. After the code appears, on your phone go to
-      WhatsApp → Settings → Linked devices → <b>Link a device</b> →
-      <b>Link with phone number instead</b>, and type the code. This page will
-      show “linked” once pairing completes.</p>
+  <div id="marketView">
+  <section class="digest" id="digest"></section>
+
+  <section class="panel hidden" id="insightsPanel">
+    <h2>Insights <span class="tip" data-tip="Automatically spotted from the group's activity in this period: unusual spikes, new crowd plays, sentiment shifts, hot streaks. Observations about group behavior, not financial advice.">i</span> <span class="sub">what's unusual · group-wide</span></h2>
+    <div id="insights" class="insights"></div>
+  </section>
+
+  <div class="grid">
+    <section class="panel tape-panel">
+      <div class="panel-head">
+        <h2>Trade tape <span class="tip" data-tip="Every trade action mentioned in the chat, in time order. The colored word is what the trader did. Use the dropdowns to filter; tap any card on the page to inspect its numbers.">i</span></h2>
+        <span id="tapeFilter" class="filter-chip hidden"></span>
+      </div>
+      <button id="filterToggle" class="ghost filter-toggle">Filters</button>
+      <div id="tapeFilters" class="tape-filters hidden"></div>
+      <div id="sliceSummary" class="slice-summary hidden"></div>
+      <div id="tape" class="tape"></div>
+    </section>
+
+    <div class="side">
+      <section class="panel">
+        <h2>Trade mix <span class="tip" data-tip="What kind of trades these were (shares, calls, puts, spreads, crypto) and what traders did (opens vs closes vs plans).">i</span></h2>
+        <div id="donut" class="donut-wrap"></div>
+        <div id="donutLegend" class="legend"></div>
+        <div id="actionBars" style="margin-top:10px"></div>
+      </section>
+      <section class="panel">
+        <h2>Symbol leaderboard <span class="tip" data-tip="Most-mentioned symbols. The +/− number is opening trades minus closing trades for that symbol. Tap a row for its numbers.">i</span></h2>
+        <div id="leaderboard"></div>
+        <p class="hint">Tap a symbol for its numbers</p>
+      </section>
     </div>
   </div>
 
-  <div class="card">
-    <h2>2 · API keys</h2>
-    <label>Gemini API key <span class="hint" style="display:inline">(<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--blue)">get one free at Google AI Studio</a>)</span></label>
-    <input id="geminiKey" type="password" placeholder="AIza…" autocomplete="off">
-    <label>Supabase project URL</label>
-    <input id="sbUrl" placeholder="https://xyz.supabase.co" autocomplete="off">
-    <label>Supabase service_role key <span class="hint" style="display:inline">(server-side only — never leaves this box)</span></label>
-    <input id="sbKey" type="password" placeholder="eyJ…" autocomplete="off">
-    <button id="saveKeys">Save keys</button>
-    <div id="keysMsg" class="msg"></div>
-    <p class="hint">Keys are written to a <b>.env</b> file on this machine (readable only by the bot).
-    They are never displayed again and never sent anywhere except Google's and Supabase's APIs.</p>
+  <section class="panel" id="clustersPanel">
+    <h2>Crowd clusters <span class="tip" data-tip="Symbols traded by 3 or more members in this period — the ideas the group agrees on.">i</span> <span class="sub">symbols traded by 3+ members in range</span></h2>
+    <div id="clusters" class="clusters"></div>
+  </section>
+
+  <div class="grid-2">
+    <section class="panel" id="optionsPanel">
+      <h2>Options lens <span class="tip" data-tip="When the options bets expire: within a month, 1–6 months, or LEAPS (more than 6 months out).">i</span></h2>
+      <div id="optionsLens"></div>
+    </section>
+    <section class="panel collapsible" id="plansPanel">
+      <h2 class="collapse-head" id="plansHead">Plans watchlist <span class="tip" data-tip="“If X happens I'll trade Y” — conditional orders members announced in the last 14 days.">i</span> <span class="sub" id="plansCount"></span> <span class="farrow" id="plansArrow">▾</span></h2>
+      <div id="plans"></div>
+    </section>
   </div>
 
-  <div class="card">
-    <h2>3 · Connect TradingView</h2>
-    <div id="tvBox">
-      <button id="tvStart" class="secondary">Get TradingView login link</button>
-      <div id="tvOut"></div>
-      <label>Paste the callback URL <span class="hint" style="display:inline">(the localhost address that fails to load — that's expected)</span></label>
-      <input id="tvCallback" placeholder="http://localhost:8080/callback?code=…" autocomplete="off">
-      <button id="tvFinish">Complete login</button>
-      <div id="tvMsg" class="msg"></div>
-      <p class="hint">One-time step. Used only to score trade outcomes against daily
-      price history (5-trading-day window). Read-only market data — it cannot place trades.</p>
-    </div>
-  </div>
+  <section class="panel collapsible" id="heatmapPanel">
+    <h2 class="collapse-head" id="heatmapHead">Activity <span class="tip" data-tip="How many trade actions the chat produced each day. Darker = busier. Hover any square for the date.">i</span> <span class="sub">actions per day, last 60 days</span> <span class="farrow" id="heatmapArrow">▾</span></h2>
+    <div id="heatmap" class="heatmap"></div>
+  </section>
+  </div><!-- /marketView -->
 
-  <div class="card">
-    <h2>4 · Run</h2>
-    <button id="runBtn" class="secondary">Run a cycle now</button>
-    <span id="runMsg" class="msg"></span>
-    <p class="hint">Pulls new WhatsApp messages, parses them with Gemini, scores outcomes
-    with TradingView data, and pushes anonymized trades to Supabase. Also runs
-    automatically every hour (06:00–22:00).</p>
-  </div>
-
-  <div class="card">
-    <h2>Log</h2>
-    <div id="log">…</div>
-    <button id="refreshLog" class="secondary">Refresh</button>
+  <div id="tradersView" class="hidden">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Traders <span class="tip" data-tip="One card per anonymous member, in the selected time range. The record counts only scored trades — 5 trading days after each action. A small sample is flagged so a lucky streak doesn't look like a track record.">i</span> <span class="sub" id="tradersRange"></span></h2>
+        <div class="seg" id="traderSortSeg">
+          <button data-sort="active" class="active">Most active</button>
+          <button data-sort="record">Best record</button>
+        </div>
+      </div>
+      <div id="traderCards" class="trader-cards"></div>
+      <p class="hint">Tap a card to see that trader's activity</p>
+    </section>
   </div>
 </main>
+
+<footer>
+  <span id="generated"></span> · members shown as anonymous traders · structured records only, no message text
+</footer>
+
+<script src="supabase-config.js"></script>
 <script src="app.js"></script>
+
+<!-- card detail popup (bottom sheet) -->
+<div id="sheetWrap" class="sheet-wrap hidden">
+  <div class="sheet-backdrop" id="sheetBackdrop"></div>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-head"><b id="sheetTitle"></b><button id="sheetX" class="ss-x" aria-label="close">✕</button></div>
+    <div id="sheetStats" class="ss-stats"></div>
+    <button id="sheetFilter" class="sheet-filter hidden"></button>
+  </div>
+</div>
 </body>
 </html>
