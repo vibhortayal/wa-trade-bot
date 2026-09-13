@@ -38,8 +38,13 @@ function clearFilters() { state.symbol = state.trader = state.instrument = state
 /* tap-to-inspect: tapping a card shows its numbers in the summary bar, never filters */
 function isPreview(kind, value) { const p = state.preview; return !!p && p.kind === kind && p.value === value; }
 function setPreview(kind, value) {
-  state.preview = isPreview(kind, value) ? null : { kind, value };
+  const was = isPreview(kind, value);
+  state.preview = was ? null : { kind, value };
   render();
+  if (!was) {
+    const el = $("sliceSummary");
+    if (el && !el.classList.contains("hidden")) el.scrollIntoView({ block: "nearest" });
+  }
 }
 function previewTrades() {
   const p = state.preview;
@@ -378,7 +383,6 @@ function renderPlans() {
     el.onclick = () => {
       if (!el.dataset.sym) return;
       setPreview("symbol", el.dataset.sym);
-      document.querySelector(".tape-panel").scrollIntoView();
     };
   });
 }
