@@ -59,11 +59,37 @@ Then open **http://\<vm-ip\>:3001**, log in with the password you chose, and:
 1. **Link WhatsApp** — enter your phone number, get the pairing code, type it
    into WhatsApp → Settings → Linked devices → *Link with phone number instead*.
 2. **Save keys** — paste the Gemini key, Supabase URL, and service_role key.
-3. **Run a cycle now** — first pull takes a few minutes (chat history sync).
+3. **Connect TradingView** — get the login link, approve it in your browser,
+   then paste the localhost callback URL back into the UI. This powers the
+   per-trade outcome scoring (5-trading-day window, read-only market data).
+4. **Run a cycle now** — first pull takes a few minutes (chat history sync).
 
 The hourly timer takes over from there. The dashboard switches to live data
 automatically once rows land in Supabase (set the anon key in
 `wa-trade-dashboard/supabase-config.js` and redeploy the dashboard).
+
+## Outcome scoring
+
+Each hourly cycle runs `score-outcomes.py` after parsing. It resolves every
+traded symbol to a TradingView ticker (cached in `data/tv_symbols.json`),
+fetches daily OHLCV bars (cached in `data/tv_bars.json`), and writes
+`data/outcomes.json` keyed by action id. Scores merge into the Supabase rows
+via the `outcome` JSONB column:
+
+- **direction** — bullish opens (BUY/ADD/call): favorable if the underlying
+  is up >1% five trading days later; bearish (put): down >1%. Options are
+  scored on the underlying's direction only — without the contract premium
+  there is no real P&L, and the outcome says so.
+- **exit** — SELL/TRIM/EXIT: favorable if the price fell >1% in the five
+  days after the exit (exit timing).
+- **plan** — PLANs with an explicit price target (`target` field, extracted
+  by the parser): hit if touched within 14 days.
+- **roundtrip** — FIFO match of BUY/ADD → SELL/TRIM/EXIT per trader+symbol;
+  the exit carries the approximate return.
+
+Entry price is the message's price when stated, else that day's close
+(`entry_src` records which). Unresolved symbols or missing bars produce
+`scored: false` — nothing is invented.
 
 ## Notes
 

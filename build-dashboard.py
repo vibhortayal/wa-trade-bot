@@ -33,6 +33,11 @@ def build_records():
     results = json.load(open(os.path.join(DATA, "trades.json")))
     pseudos = load_pseudos()
     changed = False
+    # Outcomes are scored separately (score-outcomes.py) and merged here.
+    try:
+        outcomes = json.load(open(os.path.join(DATA, "outcomes.json")))
+    except (OSError, ValueError):
+        outcomes = {}
 
     counter = [max([int(v.split()[1]) for v in pseudos.values()
                     if v.startswith("Trader ")] or [0])]
@@ -74,9 +79,11 @@ def build_records():
                 "strike": a.get("strike"),
                 "expiry": a.get("expiry"),
                 "price": a.get("price"),
+                "target": a.get("target"),
                 "quantity": a.get("quantity"),
                 "confidence": a.get("confidence"),
                 "note": note.strip(),
+                "outcome": outcomes.get(f"msg-{idx}-{j}"),
             })
 
     out.sort(key=lambda x: x["ts"])

@@ -21,6 +21,7 @@ async function refresh() {
     ["Messages parsed", `${s.parsed_messages} <span class="k">(${s.parsed_actions} actions, ${ago(s.last_parse)})</span>`],
     ["Gemini key", s.gemini_configured ? pill(true, "set") : pill(false, "missing")],
     ["Supabase", s.supabase_configured ? pill(true, "set") : pill(false, "missing")],
+    ["TradingView", s.tv_connected ? pill(true, "connected") : pill(false, "not connected")],
   ];
   $("status").innerHTML = rows.map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
   if (s.wa_paired) {
@@ -52,6 +53,33 @@ $("saveKeys").onclick = async () => {
     ? `<span class="ok">Saved: ${r.saved.join(", ")}. Fields cleared.</span>`
     : `<span class="warn">Nothing to save — fill in at least one field.</span>`;
   $("geminiKey").value = $("sbUrl").value = $("sbKey").value = "";
+  refresh();
+};
+
+$("tvStart").onclick = async () => {
+  $("tvStart").disabled = true;
+  $("tvOut").innerHTML = `<p class="hint">Contacting TradingView…</p>`;
+  try {
+    const r = await fetch("api/tv-auth-start", { method: "POST" }).then(r => r.json());
+    if (r.url) {
+      $("tvOut").innerHTML = `<p class="hint">Open this link in your browser and approve access with your TradingView account:</p>
+        <p style="word-break:break-all"><a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:var(--blue)">TradingView login</a></p>
+        <p class="hint">After approving, paste the localhost callback URL below.</p>`;
+    } else throw new Error(r.error || "unknown error");
+  } catch (e) { $("tvOut").innerHTML = `<p class="hint" style="color:var(--red)">Failed: ${esc(e.message)}</p>`; }
+  $("tvStart").disabled = false;
+};
+
+$("tvFinish").onclick = async () => {
+  const url = $("tvCallback").value.trim();
+  $("tvMsg").innerHTML = `<span class="warn">Completing login…</span>`;
+  try {
+    const r = await fetch("api/tv-auth-callback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) }).then(r => r.json());
+    if (r.ok) {
+      $("tvMsg").innerHTML = `<span class="ok">TradingView connected.</span>`;
+      $("tvCallback").value = "";
+    } else throw new Error(r.error || "unknown error");
+  } catch (e) { $("tvMsg").innerHTML = `<span style="color:var(--red)">Failed: ${esc(e.message)}</span>`; }
   refresh();
 };
 

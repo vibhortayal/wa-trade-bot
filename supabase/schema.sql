@@ -14,12 +14,18 @@ create table if not exists wa_trades (
   strike     numeric,
   expiry     text,                      -- YYYY-MM
   price      numeric,
+  target     numeric,                    -- explicit price target (PLANs), else null
   quantity   text,
   confidence text,                      -- high medium low
   note       text,
+  outcome    jsonb,                      -- scored by score-outcomes.py: {scored, kind,
+                            --   entry, entry_src, ret, favorable, tgt_hit, roundtrip, ...}
   created_at timestamptz default now()
 );
 create index if not exists wa_trades_day_idx on wa_trades (day desc);
+-- Idempotent for machines that ran an earlier version of this schema:
+alter table wa_trades add column if not exists target numeric;
+alter table wa_trades add column if not exists outcome jsonb;
 
 create table if not exists wa_meta (
   key        text primary key,

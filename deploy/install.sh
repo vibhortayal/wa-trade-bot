@@ -13,7 +13,7 @@ cd "$BOT_DIR"
 
 echo "==> system packages"
 sudo apt-get update -qq
-sudo apt-get install -y -qq curl git python3
+sudo apt-get install -y -qq curl git python3 python3-requests
 
 if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]; then
   echo "==> node 20"

@@ -10,7 +10,7 @@ DATA = os.path.expanduser("~/workspace/wa-trade-reader/data")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
-PROMPT = """You parse WhatsApp trading-group messages into structured trade records. Today is 2026-09-13.
+PROMPT = """You parse WhatsApp trading-group messages into structured trade records. Today is {today}.
 
 INPUT: a JSON array of messages. Each has id, date (YYYY-MM-DD), sender, text, and optionally quoted (the message being replied to, with its own sender/date/text).
 
@@ -24,10 +24,11 @@ Rules:
 - "Added $META $670 C Dec 27 @ 76.60" = BUY call, symbol META, strike 670, expiry 2027-12, premium 76.60.
 - "Commons"/"shares" = stock. "leaps" = long-dated calls. "140p 10/16" = put, strike 140, expiry Oct 16. Crypto like BTC counts as a trade with instrument "crypto".
 - action: one of BUY, ADD, SELL, TRIM, EXIT, HOLD, PLAN (conditional/planned), WATCH (mentions watching, no position).
+- If the message states an explicit price target for the trade (e.g. "TSLA to 300", "target 250", "looking for 4800"), extract it as "target" (a number). Otherwise null.
 - confidence: high / medium / low.
 
 OUTPUT: a JSON array, one object per input message, in the same order:
-{"id": "<message id>", "no_trade": true|false, "trades": [ {"action": "...", "symbol": "..."|null, "instrument": "stock"|"call"|"put"|"spread"|"crypto"|null, "strike": number|null, "expiry": "YYYY-MM"|null, "price": number|null, "quantity": "..."|null, "confidence": "high"|"medium"|"low", "note": "...", "context_used": true|false} ], "note": "..." }
+{"id": "<message id>", "no_trade": true|false, "trades": [ {"action": "...", "symbol": "..."|null, "instrument": "stock"|"call"|"put"|"spread"|"crypto"|null, "strike": number|null, "expiry": "YYYY-MM"|null, "price": number|null, "target": number|null, "quantity": "..."|null, "confidence": "high"|"medium"|"low", "note": "...", "context_used": true|false} ], "note": "..." }
 Return ONLY the JSON array, no other text.
 
 MESSAGES:
@@ -55,7 +56,8 @@ def call_gemini_rest(payload):
 
 
 def call_gemini(batch, tries=6):
-    payload = PROMPT + json.dumps(batch, ensure_ascii=False)
+    payload = (PROMPT.replace("{today}", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+               + json.dumps(batch, ensure_ascii=False))
     last_err = None
     for attempt in range(tries):
         try:

@@ -58,7 +58,28 @@ function tailFile(p, n = 80) {
   } catch { return ''; }
 }
 
-function getStatus() {
+// ---- TradingView (outcome scoring). Vendored CLI at vendor/tradingview/tv.py;
+// OAuth tokens live in ~/.config/tradingview-mcp on this machine. ----
+const TV_PY = path.join(ROOT, 'vendor', 'tradingview', 'tv.py');
+const TV_CWD = path.join(ROOT, 'vendor', 'tradingview');
+function tvRun(args) {
+  return new Promise((resolve) => {
+    const p = spawn('python3', [TV_PY, ...args], { cwd: TV_CWD });
+    let out = '', err = '';
+    p.stdout.on('data', (c) => { out += c; });
+    p.stderr.on('data', (c) => { err += c; });
+    p.on('close', (code) => resolve({ code, out, err }));
+    p.on('error', (e) => resolve({ code: -1, out: '', err: String(e) }));
+  });
+}
+async function tvConnected() {
+  try {
+    const r = await tvRun(['status']);
+    return /authorized:\s*True/.test(r.out);
+  } catch { return false; }
+}
+
+async function getStatus() {
   const tradesPath = path.join(ROOT, 'data', 'trades.json');
   const trades = readJson(tradesPath, []);
   const actions = trades.reduce((a, m) => a + (m.trades || []).length, 0);
@@ -77,6 +98,7 @@ function getStatus() {
     last_parse: fs.existsSync(tradesPath) ? fs.statSync(tradesPath).mtime.toISOString() : null,
     gemini_configured: !!(process.env.GEMINI_API_KEY),
     supabase_configured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
+    tv_connected: await tvConnected(),
     log_tail: tailFile(path.join(ROOT, 'logs', 'cycle.log')),
   };
 }
@@ -162,7 +184,25 @@ const server = http.createServer(async (req, res) => {
     if (!checkAuth(req, res)) return;
     const url = req.url.split('?')[0];
 
-    if (req.method === 'GET' && url === '/api/status') return send(res, 200, getStatus());
+    if (req.method === 'GET' && url === '/api/status') return send(res, 200, await getStatus());
+
+    if (req.method === 'POST' && url === '/api/tv-auth-start') {
+      const r = await tvRun(['auth', '--start']);
+      const m = r.out.match(/https:\/\/www\.tradingview\.com\/mcp\/oauth\/authorize\?[^\s"']+/);
+      if (!m) return send(res, 500, { error: (r.err || r.out || 'auth start failed').slice(0, 300) });
+      return send(res, 200, { url: m[0] });
+    }
+
+    if (req.method === 'POST' && url === '/api/tv-auth-callback') {
+      const body = await readBody(req);
+      const cb = String(body.url || '').trim();
+      if (!/^https?:\/\/\S*code=\S+/.test(cb)) {
+        return send(res, 400, { error: 'paste the full callback URL containing ?code=…' });
+      }
+      const r = await tvRun(['auth', '--callback', cb]);
+      if (r.code !== 0) return send(res, 500, { error: (r.err || r.out || 'callback failed').slice(0, 300) });
+      return send(res, 200, { ok: true, connected: await tvConnected() });
+    }
 
     if (req.method === 'GET' && url === '/api/logs') {
       return send(res, 200, { log: tailFile(path.join(ROOT, 'logs', 'cycle.log'), 120) });

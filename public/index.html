@@ -43,7 +43,7 @@
 <body>
 <main>
   <h1>◈ Trade Flow Bot</h1>
-  <p class="sub">WhatsApp reader → Gemini parser → Supabase → dashboard</p>
+  <p class="sub">WhatsApp reader → Gemini parser → TradingView scoring → Supabase → dashboard</p>
 
   <div class="card">
     <h2>Status</h2>
@@ -79,11 +79,26 @@
   </div>
 
   <div class="card">
-    <h2>3 · Run</h2>
+    <h2>3 · Connect TradingView</h2>
+    <div id="tvBox">
+      <button id="tvStart" class="secondary">Get TradingView login link</button>
+      <div id="tvOut"></div>
+      <label>Paste the callback URL <span class="hint" style="display:inline">(the localhost address that fails to load — that's expected)</span></label>
+      <input id="tvCallback" placeholder="http://localhost:8080/callback?code=…" autocomplete="off">
+      <button id="tvFinish">Complete login</button>
+      <div id="tvMsg" class="msg"></div>
+      <p class="hint">One-time step. Used only to score trade outcomes against daily
+      price history (5-trading-day window). Read-only market data — it cannot place trades.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>4 · Run</h2>
     <button id="runBtn" class="secondary">Run a cycle now</button>
     <span id="runMsg" class="msg"></span>
-    <p class="hint">Pulls new WhatsApp messages, parses them with Gemini, and pushes
-    anonymized trades to Supabase. Also runs automatically every hour (06:00–22:00).</p>
+    <p class="hint">Pulls new WhatsApp messages, parses them with Gemini, scores outcomes
+    with TradingView data, and pushes anonymized trades to Supabase. Also runs
+    automatically every hour (06:00–22:00).</p>
   </div>
 
   <div class="card">
