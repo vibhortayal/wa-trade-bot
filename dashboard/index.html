@@ -46,13 +46,14 @@
       <b>BUY</b> opened a new position · <b>ADD</b> added to one · <b>SELL</b> sold ·
       <b>TRIM</b> sold part of it · <b>EXIT</b> closed it completely ·
       <b>PLAN</b> “I'll buy if…” · <b>HOLD / WATCH</b> sitting tight.</dd></div>
-    <div><dt>Tap to inspect</dt><dd>Tap any card — a digest stat, symbol, instrument, action, cluster, option
-      bucket or plan — to see its numbers in the summary bar above the tape: how many actions,
-      the ✓/✗/– record, hit rate, average move, round trips. Tapping never filters anything;
-      the summary for a symbol, instrument or action offers a "Filter tape" button if you do
-      want to filter to it.</dd>
-      to filter the whole page, use the dropdowns above the trade tape
-      (Trader / Instrument / Action / Outcome). Tap the card again, or the ✕, to dismiss.</dd></div>
+    <div><dt>Tap a card</dt><dd>Tap any card — a digest stat, symbol, instrument, action, expiry bucket, cluster
+      or plan — and a popup shows its numbers: actions, the ✓/✗/– record, hit rate, average move,
+      round trips. Where a filter fits, the popup offers a "Filter tape" button. Tapping on its own
+      never changes the page. The dropdowns above the trade tape (Trader / Symbol / Instrument /
+      Action / Outcome / Expiry) are the deliberate way to filter; they stack, and the
+      <b>Filtered:</b> chip clears them all. "Trade actions" shows the overall summary (and offers
+      to clear filters if any are set); "Put / call" jumps to the Options lens; a trader's card
+      goes to the Market tab filtered to them.</dd></div>
     <div><dt>The dot</dt><dd>How sure the bot is it read the message correctly —
       <span class="conf high"></span> sure · <span class="conf medium"></span> maybe ·
       <span class="conf low"></span> shaky.</dd></div>
@@ -123,7 +124,7 @@
   </section>
 
   <div class="grid-2">
-    <section class="panel">
+    <section class="panel" id="optionsPanel">
       <h2>Options lens <span class="tip" data-tip="When the options bets expire: within a month, 1–6 months, or LEAPS (more than 6 months out).">i</span></h2>
       <div id="optionsLens"></div>
     </section>
@@ -160,5 +161,15 @@
 
 <script src="supabase-config.js"></script>
 <script src="app.js"></script>
+
+<!-- card detail popup (bottom sheet) -->
+<div id="sheetWrap" class="sheet-wrap hidden">
+  <div class="sheet-backdrop" id="sheetBackdrop"></div>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-head"><b id="sheetTitle"></b><button id="sheetX" class="ss-x" aria-label="close">✕</button></div>
+    <div id="sheetStats" class="ss-stats"></div>
+    <button id="sheetFilter" class="sheet-filter hidden"></button>
+  </div>
+</div>
 </body>
 </html>

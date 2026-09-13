@@ -125,14 +125,34 @@ main { max-width: 1180px; margin: 0 auto; padding: 18px 22px 40px; }
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
   border-radius: 8px; padding: 8px 10px; font-size: 14px; min-width: 110px;
 }
-/* slice summary: the "more data" shown when a card is tapped / a filter is active */
+/* slice summary: the "more data" shown when filters are active */
 .slice-summary { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 2px 0 10px; }
-@keyframes sspulse { 0% { box-shadow: 0 0 0 3px var(--blue); } 100% { box-shadow: 0 0 0 0 transparent; } }
-.slice-summary.pulse { animation: sspulse 1.4s ease-out; }
-.ss-filter {
-  background: var(--blue); border: none; color: #fff; border-radius: 8px;
-  padding: 6px 12px; cursor: pointer; font-size: 12.5px; font-weight: 600; margin-left: 10px;
-  white-space: nowrap;
+
+/* card detail popup: bottom sheet on mobile, centered dialog on desktop */
+.sheet-wrap { position: fixed; inset: 0; z-index: 60; }
+.sheet-wrap.hidden { display: none; }
+.sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .55); }
+.sheet {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 0;
+  width: 100%; max-width: 520px; max-height: 72vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-bottom: none;
+  border-radius: 16px 16px 0 0; padding: 18px 20px 26px;
+  animation: sheetup .22s ease-out;
+}
+@keyframes sheetup { from { transform: translate(-50%, 32px); opacity: .4; } to { transform: translate(-50%, 0); opacity: 1; } }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 16px; }
+.sheet-filter {
+  margin-top: 16px; width: 100%; background: var(--blue); border: none; color: #fff;
+  border-radius: 10px; padding: 11px; cursor: pointer; font-size: 14px; font-weight: 600;
+}
+.sheet-filter.hidden { display: none; }
+@media (min-width: 700px) {
+  .sheet {
+    bottom: auto; top: 50%; transform: translate(-50%, -50%);
+    border-radius: 16px; border-bottom: 1px solid var(--line);
+    animation: sheetpop .18s ease-out;
+  }
+  @keyframes sheetpop { from { transform: translate(-50%, -48%) scale(.97); opacity: .4; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
 }
 .ss-label { font-weight: 700; font-size: 13px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
 .ss-x {
