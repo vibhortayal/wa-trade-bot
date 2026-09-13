@@ -9,7 +9,7 @@ from Supabase instead of the baked-in static JSON.
 | Piece | Where | Notes |
 |---|---|---|
 | `server.js` + `public/` | your VM, port 3001 | setup UI: pairing code, keys, status, manual runs |
-| `run-cycle.sh` | systemd timer, hourly | pull → parse → push (skips 22:00–06:00 PT) |
+| `run-cycle.sh` | systemd timer, hourly | pull → parse → push (skips 18:00–06:00 PT) |
 | `wa_trades` / `wa_meta` | Supabase | anonymized actions only; anon key is read-only via RLS |
 | dashboard | Vercel | reads Supabase live, falls back to static JSON |
 

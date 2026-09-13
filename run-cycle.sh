@@ -13,8 +13,8 @@ if [ -f .env ]; then
 fi
 
 HOUR=$(date +%H)
-if [ "$HOUR" -lt 6 ] || [ "$HOUR" -ge 22 ]; then
-  echo "$(date -u +%FT%TZ) skip: outside 06:00-22:00 window"
+if [ "$HOUR" -lt 6 ] || [ "$HOUR" -ge 18 ]; then
+  echo "$(date -u +%FT%TZ) skip: outside 06:00-18:00 window"
   exit 0
 fi
 
