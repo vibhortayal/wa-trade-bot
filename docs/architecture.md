@@ -248,7 +248,7 @@ Production infrastructure (Oracle VM, Vercel, Supabase) is separated from third-
 **Assumptions and open questions [?]**
 1. Which Supabase credential does `push-supabase.py` use for upserts?
 2. What is the LLM call retry/backoff policy on failure? (Earlier "retry in smaller batches" claims were found unsupported — do not assume.)
-3. Have the Supabase RLS policies been audited?
+3. Supabase RLS policies — RESOLVED 2026-09-14: verified live. Anon key can SELECT `wa_trades`/`wa_meta` (HTTP 200); anon INSERT is rejected with 42501 "new row violates row-level security policy". Writes only via service_role from the VM push script.
 4. What backs up the VM-local state files?
 5. What happens when a manual run overlaps a scheduled cycle?
 6. Is there any alerting on cycle failure, and where do Oracle-side logs go?
