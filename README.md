@@ -4,8 +4,9 @@
 
 Trade Flow connects to a WhatsApp trading group as a linked device, pulls new
 messages every hour, extracts structured trade actions with AI, scores their
-outcomes against real market data, and serves it all on a clean dashboard —
-fully anonymized, running on your own hardware.
+outcomes against real market data, and publishes it all to a clean dashboard —
+fully anonymized. The pipeline runs on your own hardware; the dashboard is a
+static site on Vercel.
 
 🌐 **Live dashboard:** https://wa-trade-flow.vercel.app
 
@@ -15,8 +16,8 @@ fully anonymized, running on your own hardware.
 
 ```
 WhatsApp group ──► read.js ──► parse-trades.py ──► score-outcomes.py ──► push-supabase.py ──► dashboard
-(linked device)    (hourly       (Gemini: extract    (market data: 5-day    (anonymized         (Vercel or
-                    pull)         trade actions)      returns, round trips)   upsert)             self-hosted)
+(linked device)    (hourly       (Gemini: extract    (market data: 5-day    (anonymized         (Vercel;
+                    pull)         trade actions)      returns, round trips)   upsert)             static site)
 ```
 
 1. **Pull** — `read.js` opens WhatsApp Web as a linked device, fetches messages
@@ -63,6 +64,7 @@ has a clean seam:
 | Trade parsing (LLM) | Gemini API (free tier) | Any OpenAI-compatible chat-completions API: set `LLM_API_BASE` + `LLM_API_KEY` + `LLM_MODEL` in the setup UI (under *Use a different LLM instead*) or `.env`. Works with OpenAI, OpenRouter, Together, Ollama, vLLM, LM Studio… |
 | Data layer | Supabase (free tier) | Anything exposing PostgREST — the push script and dashboard speak plain PostgREST over REST, no SDK. Point `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` at your endpoint |
 | Market data | TradingView (your account) | Yahoo Finance — free, no key: set `MARKET_DATA_PROVIDER=yahoo` in the setup UI (§3) or `.env`. US stocks, ETFs and crypto; bars are split/dividend-adjusted. TradingView keeps broader coverage (symbol search, futures) |
+| Dashboard | Vercel (free tier) | The bot can serve it instead (default on; set `SERVE_DASHBOARD=0` to keep the bot to pipeline + setup UI) |
 
 Provider priority for parsing: `LLM_API_BASE` (OpenAI-compatible) →
 `GEMINI_API_KEY` (Gemini native) → Hatch `google-gemini` skill CLI (dev only).
@@ -71,8 +73,9 @@ Provider priority for parsing: `LLM_API_BASE` (OpenAI-compatible) →
 
 You need: an Ubuntu VM (Oracle Cloud Always Free works — 4 ARM cores, 24 GB
 RAM, $0), an LLM key (Gemini's free tier is the suggested default; any
-OpenAI-compatible API works), and a database (Supabase's free tier is the
-suggested default; any PostgREST endpoint works).
+OpenAI-compatible API works), a database (Supabase's free tier is the
+suggested default; any PostgREST endpoint works), and a Vercel account
+(free tier — hosts the dashboard).
 
 ```bash
 # 1. Copy the repo to your VM (or clone the repo)
@@ -95,14 +98,24 @@ Then open **`http://<vm-ip>:3001/setup.html`** and:
 4. **Run the schema** — paste `supabase/schema.sql` once in the Supabase SQL
    editor (creates `wa_trades` / `wa_meta`, anon read-only via RLS).
 5. **Run a cycle now** — pulls the last 200 messages and runs the full pipeline.
+6. **Deploy the dashboard** — Vercel is its canonical home (the bot only runs
+   the pipeline and the setup UI). Edit `dashboard/supabase-config.js` with
+   your Supabase project URL and anon key, commit, and push. In Vercel, import
+   the repo with the root directory set to `dashboard/` — it redeploys
+   automatically on every push. The dashboard reads live from Supabase.
 
 > Full VM walkthrough (Oracle console, firewall, Terraform stack):
 > [`deploy/README.md`](deploy/README.md)
 
 ## The dashboard
 
-The dashboard is a static vanilla-JS site (`dashboard/`) — the same code also
-ships in `public/` so the bot serves it directly at `http://<vm-ip>:3001/`.
+The dashboard is a static vanilla-JS site (`dashboard/`) deployed to Vercel —
+that's its canonical home. It reads live from Supabase, so there's nothing to
+run: push to `master` and Vercel redeploys.
+
+The bot can also serve the same files itself at `http://<vm-ip>:3001/`
+(`SERVE_DASHBOARD=1`, the default). Set `SERVE_DASHBOARD=0` in `.env` to keep
+the bot to pipeline + setup UI only.
 
 - **Digest + trade tape** up front; outcome badges (✓/✗/–) with 5-day returns.
 - **Six tape filters** behind one toggle; instruments and actions merged into a
