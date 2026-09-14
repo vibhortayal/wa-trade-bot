@@ -4,7 +4,8 @@ import json, subprocess, sys, os
 from datetime import datetime, timezone
 
 GEMINI = os.path.expanduser("~/workspace/skills/google-gemini/bin/gemini.py")
-DATA = os.path.expanduser("~/workspace/wa-trade-reader/data")
+# Repo-local data dir (works wherever the repo is cloned, not just the Hatch VM).
+DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 # Self-hosted mode: use a personal Gemini API key directly (set GEMINI_API_KEY).
 # Otherwise falls back to the Hatch google-gemini skill CLI.
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -90,7 +91,11 @@ def call_gemini(batch, tries=6):
     raise RuntimeError(f"gemini failed after {tries} tries: " + (last_err or ""))
 
 def main():
-    msgs = [json.loads(l) for l in open(f"{DATA}/messages.jsonl") if l.strip()]
+    msgs_path = f"{DATA}/messages.jsonl"
+    if not os.path.exists(msgs_path):
+        print("no messages yet (nothing pulled), nothing to parse")
+        return
+    msgs = [json.loads(l) for l in open(msgs_path) if l.strip()]
     batch_msgs = []
     for idx, m in enumerate(msgs):
         if not m.get("body"):
