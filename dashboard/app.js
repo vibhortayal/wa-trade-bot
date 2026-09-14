@@ -439,7 +439,7 @@ function renderTapeFilters() {
       [{ v: "", t: "All" }].concat(syms.map(s => ({ v: s, t: s }))),
       state.symbol || "") +
     sel("fInst", "Instrument",
-      [{ v: "", t: "All" }].concat(["stock", "call", "put", "spread", "crypto", "other"].map(i => ({ v: i, t: i }))),
+      [{ v: "", t: "All" }].concat(["stock", "call", "put", "spread", "crypto"].map(i => ({ v: i, t: i }))),
       state.instrument || "") +
     sel("fAct", "Action",
       [{ v: "", t: "All" }].concat(["BUY", "ADD", "SELL", "TRIM", "EXIT", "PLAN", "HOLD", "WATCH"].map(a => ({ v: a, t: a }))),
@@ -760,13 +760,14 @@ async function loadData() {
           .then(r => (r.ok ? r.json() : [])).catch(() => []),
       ]);
       if (Array.isArray(tr) && tr.length) {
+        // Trades without a determinable instrument are noise: disregarded.
         const trades = tr.map(row => ({
           day: row.day, ts: Number(row.ts), trader: row.trader, action: row.action,
           symbol: row.symbol, instrument: row.instrument, strike: row.strike,
           expiry: row.expiry, price: row.price, quantity: row.quantity,
           confidence: row.confidence, note: row.note,
           target: row.target, outcome: row.outcome || null,
-        }));
+        })).filter(t => t.instrument);
         const days = [...new Set(trades.map(t => t.day))].sort();
         const meta = Object.fromEntries((me || []).map(m => [m.key, m.value]));
         let lastCycle = null;
@@ -784,6 +785,7 @@ async function loadData() {
   const res = await fetch("data/trades.json");
   const fb = await res.json();
   fb.live = false;
+  if (Array.isArray(fb.trades)) fb.trades = fb.trades.filter(t => t.instrument);
   return fb;
 }
 

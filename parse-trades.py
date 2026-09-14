@@ -95,6 +95,7 @@ Rules:
 - GROUNDING RULE (strict): the symbol MUST appear in THIS message or its quoted reply — verbatim as a ticker ($META, META), or as an unambiguous company name ("Amazon"->AMZN, "Rubrik"->RBRK, "Bitcoin"/$BTC->BTC). If the symbol appears nowhere in the message+quote, set symbol to null and confidence to "low", and say what is missing in "note". NEVER borrow a symbol from any other message.
 - "Added $META $670 C Dec 27 @ 76.60" = BUY call, symbol META, strike 670, expiry 2027-12, premium 76.60.
 - "Commons"/"shares" = stock. "leaps" = long-dated calls. "140p 10/16" = put, strike 140, expiry Oct 16. Crypto like BTC counts as a trade with instrument "crypto".
+- Every trade needs an instrument. If no instrument can be determined for a trade (not stock/shares, not a call/put/spread, not crypto), drop that trade. If no trades remain, set "no_trade": true and say so in "note".
 - action: one of BUY, ADD, SELL, TRIM, EXIT, HOLD, PLAN (conditional/planned), WATCH (mentions watching, no position).
 - If the message states an explicit price target for the trade (e.g. "TSLA to 300", "target 250", "looking for 4800"), extract it as "target" (a number). Otherwise null.
 - confidence: high / medium / low.

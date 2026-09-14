@@ -1,5 +1,5 @@
-/* Trade Flow dashboard — vanilla JS, hand-rolled SVG */
-const state = { mode: "week", end: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, showFilters: false, showPlans: false, showHeatmap: false, tab: "market", traderSort: "active" };
+/* Trading Floor dashboard — vanilla JS, hand-rolled SVG */
+const state = { mode: "day", end: null, customStart: null, customEnd: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, showFilters: false, showPlans: false, showHeatmap: false, tab: "market", traderSort: "active" };
 let DATA = null;
 
 const ACTION_COLORS = {
@@ -15,15 +15,58 @@ const timeFmt = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-d
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const isoDay = d => d.toISOString().slice(0, 10);
+const parseDay = s => new Date(s + "T12:00:00");
 
 function windowDays() {
-  const n = state.mode === "day" ? 1 : state.mode === "week" ? 7 : 30;
-  const days = [], d = new Date(state.end + "T12:00:00");
-  for (let i = n - 1; i >= 0; i--) {
-    const t = new Date(d); t.setDate(t.getDate() - i);
-    days.push(t.toISOString().slice(0, 10));
+  // day: just the end date. week: Mon–Fri of end's week. month: 1st of end's
+  // month through end. custom: the picked range. The window never runs past
+  // the latest data day.
+  const dataMax = DATA.day_range[1];
+  if (state.mode === "custom") {
+    if (!state.customStart || !state.customEnd) return [state.end];
+    const lo = state.customStart < DATA.day_range[0] ? DATA.day_range[0] : state.customStart;
+    const hi = state.customEnd > dataMax ? dataMax : state.customEnd;
+    const days = [];
+    for (let d = parseDay(lo); isoDay(d) <= hi; d.setDate(d.getDate() + 1)) days.push(isoDay(d));
+    return days.length ? days : [state.end];
   }
-  return days;
+  const endD = parseDay(state.end);
+  if (state.mode === "week") {
+    const mon = new Date(endD); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+    const fri = new Date(mon); fri.setDate(fri.getDate() + 4);
+    const last = fri < endD ? fri : endD;
+    const days = [];
+    for (let d = new Date(mon); d <= last; d.setDate(d.getDate() + 1)) days.push(isoDay(d));
+    return days;
+  }
+  if (state.mode === "month") {
+    const first = new Date(endD.getFullYear(), endD.getMonth(), 1, 12);
+    const monthEnd = new Date(endD.getFullYear(), endD.getMonth() + 1, 0, 12);
+    const maxD = parseDay(dataMax);
+    const last = monthEnd < maxD ? monthEnd : maxD;
+    const days = [];
+    for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) days.push(isoDay(d));
+    return days;
+  }
+  return [state.end];
+}
+// Snap the end anchor to a week/month boundary when entering those modes,
+// so the window always ends exactly on the shown range.
+function snapEnd() {
+  const dataMax = DATA.day_range[1];
+  const endD = parseDay(state.end);
+  if (state.mode === "week") {
+    const fri = new Date(endD);
+    fri.setDate(fri.getDate() + ((5 - fri.getDay() + 7) % 7));
+    let f = isoDay(fri);
+    if (f > dataMax) f = dataMax;
+    if (f < DATA.day_range[0]) f = DATA.day_range[0];
+    state.end = f;
+  } else if (state.mode === "month") {
+    const monthEnd = isoDay(new Date(endD.getFullYear(), endD.getMonth() + 1, 0, 12));
+    state.end = monthEnd > dataMax ? dataMax : monthEnd;
+  }
 }
 function inRange(t) {
   return windowDays().includes(t.day)
@@ -268,9 +311,51 @@ function instLabel(t) {
   else if (t.instrument === "stock") parts.push("shares");
   if (t.strike) parts.push("$" + t.strike);
   if (t.expiry) parts.push(t.expiry);
-  if (t.price) parts.push("@" + t.price);
   if (t.quantity) parts.push("× " + t.quantity);
   return parts.join(" ");
+}
+/* Assumed entry price: when the message stated no price, scoring already fell
+   back to the day's close (outcome.entry_src === "close"). For stock/crypto
+   we surface that close, explicitly labeled as an assumption. Options are
+   excluded on purpose — the close is the underlying, not the contract
+   premium, so showing it as the price would be wrong. */
+function assumedPrice(t) {
+  const o = t.outcome || {};
+  const instr = (t.instrument || "").toLowerCase();
+  if (t.price == null && o.entry && o.entry_src === "close" &&
+      (instr === "stock" || instr === "crypto")) {
+    return { value: o.entry,
+             tip: `Assumed entry — ${(t.symbol || "this") + " closed at $" + trimNum(o.entry)} on ${fmtDay(t.day)}. The message didn't state a price.` };
+  }
+  return null;
+}
+const trimNum = v => String(Number(v));
+function priceChip(t) {
+  if (t.price) return `<span class="pchip">@${esc(t.price)}</span>`;
+  const ap = assumedPrice(t);
+  if (ap) return `<span class="pchip assumed tipx" data-tip="${esc(ap.tip)}">@~${esc(trimNum(ap.value))}</span>`;
+  return "";
+}
+/* Data-quality flag: which fields a trade post is missing. Powers the
+   "incomplete" marker — the visible nudge to post better messages. An
+   assumed price counts as present; the ~ label carries the honesty. */
+function missingFields(t) {
+  const m = [];
+  if (!t.symbol) m.push("symbol");
+  const instr = (t.instrument || "").toLowerCase();
+  if (instr === "call" || instr === "put") {
+    if (t.strike == null) m.push("strike");
+    if (!t.expiry) m.push("expiry");
+    if (t.price == null) m.push("premium");
+  } else if (t.price == null && !assumedPrice(t)) {
+    m.push("price");
+  }
+  return m;
+}
+function incompleteChip(t) {
+  const miss = missingFields(t);
+  if (!miss.length) return "";
+  return `<span class="tipx incomplete" data-tip="Incomplete post — missing: ${esc(miss.join(", "))}.">incomplete</span>`;
 }
 function pctStr(x) { return (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + "%"; }
 /* Outcome badge — reads t.outcome identically from static JSON or Supabase.
@@ -321,6 +406,8 @@ function renderTape(trades) {
           <span class="badge b-${t.action}">${t.action}</span>
           <span class="tsym">${esc(t.symbol || "—")}</span>
           <span class="tinst">${esc(instLabel(t))}</span>
+          ${priceChip(t)}
+          ${incompleteChip(t)}
           <span class="conf ${t.confidence}" title="${t.confidence} confidence"></span>
           ${outcomeBadge(t)}
           <span class="ttrader">${esc(t.trader)}</span>
@@ -352,7 +439,7 @@ function renderTapeFilters() {
       [{ v: "", t: "All" }].concat(syms.map(s => ({ v: s, t: s }))),
       state.symbol || "") +
     sel("fInst", "Instrument",
-      [{ v: "", t: "All" }].concat(["stock", "call", "put", "spread", "crypto", "other"].map(i => ({ v: i, t: i }))),
+      [{ v: "", t: "All" }].concat(["stock", "call", "put", "spread", "crypto"].map(i => ({ v: i, t: i }))),
       state.instrument || "") +
     sel("fAct", "Action",
       [{ v: "", t: "All" }].concat(["BUY", "ADD", "SELL", "TRIM", "EXIT", "PLAN", "HOLD", "WATCH"].map(a => ({ v: a, t: a }))),
@@ -613,8 +700,18 @@ function render() {
   $("tradersView").classList.toggle("hidden", state.tab !== "traders");
   $("dateLabel").textContent = fmtRange();
   const days = DATA.day_range;
-  $("prevBtn").disabled = windowDays()[0] <= days[0];
-  $("nextBtn").disabled = state.end >= days[1];
+  const isCustom = state.mode === "custom";
+  $("customRow").classList.toggle("hidden", !isCustom);
+  if (isCustom) {
+    const cs = $("customStart"), ce = $("customEnd");
+    cs.min = ce.min = days[0];
+    cs.max = ce.max = days[1];
+    if (state.customStart) cs.value = state.customStart;
+    if (state.customEnd) ce.value = state.customEnd;
+  }
+  $("prevBtn").disabled = isCustom || windowDays()[0] <= days[0];
+  $("nextBtn").disabled = isCustom || state.end >= days[1];
+  renderHealth();
   document.querySelectorAll("#rangeSeg button").forEach(b =>
     b.classList.toggle("active", b.dataset.mode === state.mode));
   if (state.tab === "traders") { renderTraders(); return; }
@@ -629,11 +726,20 @@ function render() {
   renderHeatmap();
 }
 function shift(dir) {
-  const step = state.mode === "day" ? 1 : state.mode === "week" ? 7 : 30;
-  const d = new Date(state.end + "T12:00:00");
-  d.setDate(d.getDate() + dir * step);
-  state.end = d.toISOString().slice(0, 10);
+  // day: step a day. week: jump to the Friday of the adjacent trading week.
+  // month: jump to the last day of the adjacent calendar month.
   const [lo, hi] = DATA.day_range;
+  const d = parseDay(state.end);
+  if (state.mode === "week") {
+    const fri = new Date(d);
+    fri.setDate(fri.getDate() + ((5 - fri.getDay() + 7) % 7) + dir * 7);
+    d.setTime(fri.getTime());
+  } else if (state.mode === "month") {
+    d.setTime(new Date(d.getFullYear(), d.getMonth() + dir + 1, 0, 12).getTime());
+  } else {
+    d.setDate(d.getDate() + dir);
+  }
+  state.end = isoDay(d);
   if (state.end < lo) state.end = lo;
   if (state.end > hi) state.end = hi;
   render();
@@ -654,26 +760,93 @@ async function loadData() {
           .then(r => (r.ok ? r.json() : [])).catch(() => []),
       ]);
       if (Array.isArray(tr) && tr.length) {
+        // Trades without a determinable instrument are noise: disregarded.
         const trades = tr.map(row => ({
           day: row.day, ts: Number(row.ts), trader: row.trader, action: row.action,
           symbol: row.symbol, instrument: row.instrument, strike: row.strike,
           expiry: row.expiry, price: row.price, quantity: row.quantity,
           confidence: row.confidence, note: row.note,
           target: row.target, outcome: row.outcome || null,
-        }));
+        })).filter(t => t.instrument);
         const days = [...new Set(trades.map(t => t.day))].sort();
         const meta = Object.fromEntries((me || []).map(m => [m.key, m.value]));
+        let lastCycle = null;
+        try { lastCycle = meta.last_cycle ? JSON.parse(meta.last_cycle) : null; } catch (e) {}
         return {
           generated: meta.last_push || "",
           day_range: [days[0], days[days.length - 1]],
           n_traders: new Set(trades.map(t => t.trader)).size,
           trades, live: true,
+          lastPush: meta.last_push || "", lastCycle,
         };
       }
     } catch (e) { console.warn("supabase unavailable, using static data:", e.message); }
   }
   const res = await fetch("data/trades.json");
-  return await res.json();
+  const fb = await res.json();
+  fb.live = false;
+  if (Array.isArray(fb.trades)) fb.trades = fb.trades.filter(t => t.instrument);
+  return fb;
+}
+
+/* ---------- health pill ---------- */
+function etMinutes() {
+  const p = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", hour: "numeric", minute: "numeric", hour12: false
+  }).formatToParts(new Date());
+  const h = (+p.find(x => x.type === "hour").value) % 24;
+  return h * 60 + (+p.find(x => x.type === "minute").value);
+}
+function fmtAge(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + "m ago";
+  const h = Math.round(m / 60);
+  if (h < 48) return h + "h ago";
+  return Math.round(h / 24) + "d ago";
+}
+function fmtCycleTime(iso) {
+  return new Date(iso).toLocaleString("en-US", {
+    timeZone: "America/New_York", month: "short", day: "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
+}
+function renderHealth() {
+  const pill = $("healthPill"), txt = $("healthText");
+  let cls = "health-idle", short = "checking…", tip = "";
+  const c = DATA.lastCycle || null;
+  if (!DATA.live) {
+    short = "local snapshot";
+    tip = "Showing baked-in data — the live feed is unreachable right now.";
+  } else if (c && c.status === "error") {
+    cls = "health-err";
+    short = "cycle failed";
+    tip = `Last cycle ${fmtCycleTime(c.ended_at)} ET failed at the ${c.step || "unknown"} step. ` +
+      "Check the setup UI logs on the server.";
+  } else if (DATA.lastPush) {
+    const age = Date.now() - new Date(DATA.lastPush).getTime();
+    const em = etMinutes();
+    // cycles expected hourly 08:30–17:00 ET plus the midnight run
+    const expected = em < 90 || (em >= 480 && em <= 1080);
+    short = fmtAge(age);
+    const bits = [];
+    if (c && c.status === "ok") {
+      const m = c.messages, a = c.new_actions;
+      bits.push(`${m == null ? "–" : m} new messages${a ? `, ${a} new trades` : ""}`);
+    }
+    tip = `Last successful cycle: ${fmtCycleTime(DATA.lastPush)} ET (${short}).` +
+      (bits.length ? ` That cycle: ${bits.join(" · ")}.` : "") +
+      " Cycles run hourly 8:30am–5pm ET plus a midnight run.";
+    if (age <= 100 * 60000) cls = "health-ok";
+    else if (expected) cls = "health-warn";
+    // outside expected hours an old push is normal -> stays neutral gray
+  } else {
+    short = "no cycles yet";
+    tip = "No successful cycle has pushed data yet.";
+  }
+  pill.className = "tipx health-pill " + cls;
+  txt.textContent = short;
+  pill.setAttribute("data-tip", tip);
 }
 
 async function init() {
@@ -734,7 +907,18 @@ window.addEventListener("scroll", hideTip, { passive: true, capture: true });
 window.addEventListener("resize", hideTip);
   $("generated").textContent = "data through " + fmtDay(DATA.day_range[1]) + (DATA.live ? " · live" : "");
   document.querySelectorAll("#rangeSeg button").forEach(b =>
-    b.onclick = () => { state.mode = b.dataset.mode; clearFilters(); render(); });
+    b.onclick = () => {
+      const prevShown = state.mode === "custom" ? null : windowDays();
+      state.mode = b.dataset.mode;
+      if (state.mode === "custom" && prevShown) {
+        // start the custom range from whatever is currently shown
+        state.customStart = prevShown[0];
+        state.customEnd = prevShown[prevShown.length - 1];
+      } else if (state.mode !== "custom") {
+        snapEnd();
+      }
+      clearFilters(); render();
+    });
   document.querySelectorAll("#tabSeg button").forEach(b =>
     b.onclick = () => { state.tab = b.dataset.tab; render(); });
   document.querySelectorAll("#traderSortSeg button").forEach(b =>
@@ -746,7 +930,29 @@ window.addEventListener("resize", hideTip);
     });
   $("prevBtn").onclick = () => shift(-1);
   $("nextBtn").onclick = () => shift(1);
-  $("todayBtn").onclick = () => { state.end = DATA.day_range[1]; render(); };
+  $("todayBtn").onclick = () => {
+    if (state.mode === "custom" && state.customStart) {
+      state.customEnd = DATA.day_range[1];
+      if (state.customEnd < state.customStart) state.customStart = state.customEnd;
+    } else {
+      state.end = DATA.day_range[1];
+    }
+    render();
+  };
+  // custom range date pickers
+  const cs = $("customStart"), ce = $("customEnd");
+  const applyCustom = () => {
+    const [lo, hi] = DATA.day_range;
+    let s = cs.value || state.customStart || lo;
+    let e = ce.value || state.customEnd || hi;
+    if (s < lo) s = lo;
+    if (e > hi) e = hi;
+    if (s > e) e = s;
+    state.customStart = s; state.customEnd = e;
+    clearFilters(); render();
+  };
+  cs.onchange = applyCustom;
+  ce.onchange = applyCustom;
   render();
 }
 init();
