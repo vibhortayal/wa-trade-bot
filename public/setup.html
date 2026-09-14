@@ -31,6 +31,11 @@
             white-space: pre-wrap; word-break: break-word; }
   .hint { color: #9aa0ae; font-size: .85rem; margin: 6px 0; }
   label { display: block; font-size: .85rem; color: #9aa0ae; margin: 8px 0 4px; }
+  .fld-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .fld-state { font-size: .78rem; }
+  .fld-state.set { color: #5fd68a; }
+  .fld-state.unset { color: #e0b45f; }
+  a.fld-reset { font-size: .78rem; color: #e0685f; }
   a { color: #8fb0ff; }
 </style>
 </head>
@@ -55,15 +60,18 @@
 </section>
 
 <section>
-  <h2>2 · API keys</h2>
-  <label>Gemini API key (for parsing trades)</label>
+  <h2>2 · API keys &amp; group</h2>
+  <div class="fld-head"><label for="gemini_key" style="margin:0">Gemini API key (for parsing trades)</label><span><span class="fld-state" id="st_gemini_key"></span> <a href="#" class="fld-reset" onclick="return resetField('GEMINI_API_KEY','Gemini API key')">reset</a></span></div>
   <input id="gemini_key" type="password" placeholder="AIza…" autocomplete="off">
-  <label>Supabase project URL</label>
+  <div class="fld-head"><label for="supabase_url" style="margin:8px 0 0">Supabase project URL</label><span><span class="fld-state" id="st_supabase_url"></span> <a href="#" class="fld-reset" onclick="return resetField('SUPABASE_URL','Supabase URL')">reset</a></span></div>
   <input id="supabase_url" type="text" placeholder="https://xyz.supabase.co" autocomplete="off">
-  <label>Supabase service_role key</label>
+  <div class="fld-head"><label for="supabase_service_key" style="margin:8px 0 0">Supabase service_role key</label><span><span class="fld-state" id="st_supabase_service_key"></span> <a href="#" class="fld-reset" onclick="return resetField('SUPABASE_SERVICE_KEY','Supabase service key')">reset</a></span></div>
   <input id="supabase_service_key" type="password" placeholder="eyJ…" autocomplete="off">
+  <div class="fld-head"><label for="group_query" style="margin:8px 0 0">WhatsApp group to watch</label><span><span class="fld-state" id="st_group_query"></span> <a href="#" class="fld-reset" onclick="return resetField('WA_GROUP_QUERY','group query')">reset</a></span></div>
+  <input id="group_query" type="text" placeholder="your group name" autocomplete="off">
+  <p class="hint">Substring match on the group name — the reader only touches group chats and stays within this one group.</p>
   <div class="row" style="margin-top:10px">
-    <button onclick="saveKeys()">Save keys</button>
+    <button onclick="saveKeys()">Save</button>
   </div>
   <p class="hint" id="keysOut"></p>
   <p class="hint">After saving, create the tables (one-time): copy the SQL below, then in your Supabase dashboard → SQL Editor → New query → paste → Run.</p>
@@ -258,16 +266,55 @@ async function saveKeys() {
     gemini_key: document.getElementById('gemini_key').value.trim(),
     supabase_url: document.getElementById('supabase_url').value.trim(),
     supabase_service_key: document.getElementById('supabase_service_key').value.trim(),
+    group_query: document.getElementById('group_query').value.trim(),
   };
   const out = document.getElementById('keysOut');
   try {
     const r = await api('/api/keys', { method: 'POST',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    out.innerHTML = '<span class="ok">Saved: ' + esc((r.saved || []).join(', ') || 'nothing new') + '</span>';
+    const parts = [];
+    if ((r.saved || []).length) parts.push('saved: ' + r.saved.join(', '));
+    if ((r.cleared || []).length) parts.push('cleared: ' + r.cleared.join(', '));
+    out.innerHTML = '<span class="ok">' + esc(parts.join(' · ') || 'nothing changed') + '</span>';
     document.getElementById('gemini_key').value = '';
     document.getElementById('supabase_service_key').value = '';
+    document.getElementById('group_query').value = '';
   } catch (e) { out.innerHTML = '<span class="no">Error: ' + esc(e.message) + '</span>'; }
   refreshStatus();
+  refreshConfig();
+}
+
+// Show what's currently configured (secrets stay masked) and allow reset.
+async function refreshConfig() {
+  let c;
+  try { c = await api('/api/config'); } catch (e) { return; }
+  const setState = (id, info, showValue) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (info.set) {
+      el.className = 'fld-state set';
+      el.textContent = 'set' + (showValue && info.value ? ' — ' + info.value : info.hint ? ' (' + info.hint + ')' : '');
+    } else {
+      el.className = 'fld-state unset';
+      el.textContent = 'not set';
+    }
+  };
+  setState('st_gemini_key', c.gemini_key);
+  setState('st_supabase_url', c.supabase_url, true);
+  setState('st_supabase_service_key', c.supabase_service_key);
+  setState('st_group_query', c.group_query, true);
+}
+
+async function resetField(envKey, label) {
+  if (!confirm('Clear the ' + label + '? The pipeline will stop using it until you save a new value.')) return false;
+  const out = document.getElementById('keysOut');
+  try {
+    const r = await api('/api/keys', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reset: [envKey] }) });
+    out.innerHTML = '<span class="ok">Cleared: ' + esc((r.cleared || []).join(', ') || 'nothing') + '</span>';
+  } catch (e) { out.innerHTML = '<span class="no">Error: ' + esc(e.message) + '</span>'; }
+  refreshConfig();
+  return false;
 }
 
 async function tvStart() {
@@ -356,6 +403,7 @@ async function copyLog() {
 }
 
 refreshStatus();
+refreshConfig();
 setInterval(refreshStatus, 15000);
 </script>
 </body>

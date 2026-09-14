@@ -4,7 +4,9 @@
 // API:
 //   GET  /api/status            connection + pipeline state
 //   POST /api/pair   {phone}   request a WhatsApp pairing code (one-time)
-//   POST /api/keys   {gemini_key?, supabase_url?, supabase_service_key?}
+//   POST /api/keys   {gemini_key?, supabase_url?, supabase_service_key?,
+//                     group_query?, reset?:[ENV_KEY...]}
+//   GET  /api/config            current config (secrets masked, never raw)
 //   POST /api/run              trigger a pull->parse->push cycle now
 //   GET  /api/logs             tail of the cycle log
 //
@@ -51,6 +53,17 @@ function loadEnvFile() {
   }
 }
 loadEnvFile();
+// Read the .env file fresh (for the setup UI), without touching process.env.
+function readEnvFile() {
+  const env = {};
+  const p = path.join(ROOT, '.env');
+  if (!fs.existsSync(p)) return env;
+  for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)=(.*)\s*$/);
+    if (m) env[m[1]] = unquoteEnv(m[2]);
+  }
+  return env;
+}
 
 const pairing = { state: 'idle', code: null, codeAt: 0, error: null, client: null };
 // idle|starting|waiting|paired|failed. The READY marker is the durable proof of
@@ -331,22 +344,43 @@ const server = http.createServer(async (req, res) => {
         gemini_key: 'GEMINI_API_KEY',
         supabase_url: 'SUPABASE_URL',
         supabase_service_key: 'SUPABASE_SERVICE_KEY',
+        group_query: 'WA_GROUP_QUERY',
       };
       const envPath = path.join(ROOT, '.env');
       let lines = [];
       try { lines = fs.readFileSync(envPath, 'utf8').split('\n'); } catch {}
-      const saved = [];
+      const saved = [], cleared = [];
+      const resetList = Array.isArray(body.reset) ? body.reset : [];
       for (const [field, envKey] of Object.entries(map)) {
+        const idx = lines.findIndex((l) => l.startsWith(envKey + '='));
+        if (resetList.includes(envKey)) {
+          if (idx >= 0) lines.splice(idx, 1);
+          delete process.env[envKey];
+          cleared.push(field);
+          continue;
+        }
         const val = String(body[field] || '').trim();
         if (!val) continue;
         process.env[envKey] = val; // live for this process
-        const idx = lines.findIndex((l) => l.startsWith(envKey + '='));
         const line = `${envKey}=${envQuote(val)}`;
         if (idx >= 0) lines[idx] = line; else lines.push(line);
         saved.push(field);
       }
       fs.writeFileSync(envPath, lines.filter((l) => l.trim()).join('\n') + '\n', { mode: 0o600 });
-      return send(res, 200, { saved });
+      return send(res, 200, { saved, cleared });
+    }
+
+    // Current configuration for the setup UI. Secrets are never returned —
+    // only whether they're set plus a masked hint.
+    if (req.method === 'GET' && url === '/api/config') {
+      const env = readEnvFile();
+      const hint = (v) => v ? '••••' + String(v).slice(-4) : '';
+      return send(res, 200, {
+        gemini_key: { set: !!env.GEMINI_API_KEY, hint: hint(env.GEMINI_API_KEY) },
+        supabase_url: { set: !!env.SUPABASE_URL, value: env.SUPABASE_URL || '' },
+        supabase_service_key: { set: !!env.SUPABASE_SERVICE_KEY, hint: hint(env.SUPABASE_SERVICE_KEY) },
+        group_query: { set: !!env.WA_GROUP_QUERY, value: env.WA_GROUP_QUERY || '' },
+      });
     }
 
     if (req.method === 'POST' && url === '/api/run') {
