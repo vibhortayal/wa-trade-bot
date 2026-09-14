@@ -42,6 +42,7 @@ function sliceList(kind, value, trades) {
   if (kind === "options") return trades.filter(t => ["call", "put", "spread"].includes(t.instrument));
   if (kind === "flow") return trades.filter(t => OPEN.has(t.action) || CLOSE.has(t.action));
   if (kind === "symbol") return trades.filter(t => t.symbol === value);
+  if (kind === "trader") return trades.filter(t => t.trader === value);
   if (kind === "instrument") return trades.filter(t => (t.instrument || "other") === value);
   if (kind === "action") return trades.filter(t => t.action === value);
   if (kind === "obucket") return trades.filter(t => (expiryBucket(t) || "unstated") === value);
@@ -61,12 +62,18 @@ function openSheet(kind, value) {
   }
   $("sheetStats").innerHTML = bits.join("<span class='ss-dot'>·</span>");
   const fb = $("sheetFilter");
-  const fmap = { symbol: "symbol", instrument: "instrument", action: "action", obucket: "obucket" };
+  const fmap = { symbol: "symbol", instrument: "instrument", action: "action", obucket: "obucket", trader: "trader" };
   const anyFilter = state.symbol || state.trader || state.instrument || state.action || state.obucket || state.ofav;
   if (fmap[kind]) {
     fb.classList.remove("hidden");
     fb.textContent = `Filter tape to this ${kind === "obucket" ? "expiry" : kind}`;
-    fb.onclick = () => { closeSheet(); state[fmap[kind]] = value; state.showFilters = true; render(); };
+    fb.onclick = () => {
+      closeSheet();
+      state[fmap[kind]] = value;
+      if (kind === "trader") { state.tab = "market"; state.showFilters = true; }
+      render();
+      if (kind === "trader") window.scrollTo(0, 0);
+    };
   } else if (kind === "all" && anyFilter) {
     fb.classList.remove("hidden");
     fb.textContent = "Clear all filters";
@@ -600,12 +607,7 @@ function renderTraders() {
     </div>`;
   }).join("");
   document.querySelectorAll(".tcard").forEach(el => {
-    el.onclick = () => {
-      state.trader = el.dataset.trader;
-      state.tab = "market";
-      render();
-      window.scrollTo(0, 0);
-    };
+    el.onclick = () => openSheet("trader", el.dataset.trader);
   });
 }
 
