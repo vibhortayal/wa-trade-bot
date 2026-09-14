@@ -192,6 +192,12 @@ Setup-UI API (all behind HTTP Basic Auth, any username):
 
 ## Troubleshooting
 
+**Oracle says "out of capacity" when creating the VM.** Always Free capacity
+in a region comes and goes — we hit this in us-sanjose-1 for both free shapes.
+Retry, or try the other shape. What unblocked us: upgrading the tenancy to Pay
+As You Go (card on file, still free-tier eligible) with a budget alert as a
+safety net.
+
 **Pairing code never appears.** The #1 cause: Chromium can't launch from the
 systemd service. Snap's launcher (`/snap/bin/chromium`) refuses to run inside a
 service cgroup — point `PUPPETEER_EXECUTABLE_PATH` at the real binary instead:
