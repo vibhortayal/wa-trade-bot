@@ -6,10 +6,11 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%HOME%/wa-trade-bot
+EnvironmentFile=%HOME%/wa-trade-bot/.env
 ExecStart=/usr/bin/node %HOME%/wa-trade-bot/server.js
 Restart=always
 RestartSec=10
-# Secrets live in %HOME%/wa-trade-bot/.env (mode 600), loaded by server.js.
+# Secrets live in %HOME%/wa-trade-bot/.env (mode 600), loaded via EnvironmentFile.
 # ADMIN_PASSWORD must be set there before first start.
 
 [Install]
