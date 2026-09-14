@@ -275,6 +275,10 @@
     footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 31px 0 38px; color: var(--muted); font-size: 12px; }
     footer a { color: var(--ink); font-weight: 600; text-decoration: none; }
 
+    .prompt-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 44px 0 16px; }
+    .prompt-head h3 { margin: 0; font-size: 20px; }
+    .prompt-scroll { max-height: 460px; overflow-y: auto; }
+    .prompt-scroll span { white-space: pre-wrap; }
     @media (max-width: 900px) {
       .hero { grid-template-columns: 1fr; padding-top: 35px; }
       .hero-copy { max-width: 690px; }
@@ -504,6 +508,96 @@
       </div>
     </section>
 
+    <section class="features" id="setup">
+      <div class="wrap">
+        <div class="feature-head">
+          <span class="section-num">05 / GET STARTED</span>
+          <h2>From zero to live in an afternoon.</h2>
+          <p>Gather the prerequisites, then hand the prompt below to your AI agent. Every step is verified against the actual installer and setup UI — no guesswork.</p>
+        </div>
+        <div class="feature-list">
+          <article class="feature-row">
+            <span class="n">01</span><h3>Oracle Cloud account</h3>
+            <div><p>Always Free tier. One VM: Ubuntu 24.04, Ampere A1 shape (4 OCPUs / 24 GB RAM), public subnet with TCP ingress on port 3001. Free capacity comes and goes — retry provisioning if it fails.</p></div>
+          </article>
+          <article class="feature-row">
+            <span class="n">02</span><h3>WhatsApp on your phone</h3>
+            <div><p>The bot pairs as a linked device with a one-time code. No spare SIM, no number changes.</p></div>
+          </article>
+          <article class="feature-row">
+            <span class="n">03</span><h3>Gemini API key</h3>
+            <div><p>Free tier from Google AI Studio. Used only to turn chat messages into structured trade records.</p></div>
+          </article>
+          <article class="feature-row">
+            <span class="n">04</span><h3>Supabase project</h3>
+            <div><p>Free tier. You need the project URL and the service_role key — writes stay on your VM while the dashboard reads with the anon key. The schema ships in the repo and inside the setup UI.</p></div>
+          </article>
+          <article class="feature-row">
+            <span class="n">05</span><h3>TradingView account</h3>
+            <div><p><span class="tag">OPTIONAL</span>&nbsp; Only needed for the five-day outcome scoring. The pipeline runs fine without it.</p></div>
+          </article>
+        </div>
+        <div class="prompt-head">
+          <h3>The setup prompt</h3>
+          <button class="btn btn-secondary" id="copyPrompt" type="button">Copy prompt</button>
+        </div>
+        <div class="terminal prompt-scroll" aria-label="Setup prompt"><div class="terminal-bar"><i></i><i></i><i></i></div><span id="setupPrompt">Set up Trade Flow end to end: https://github.com/vibhortayal/wa-trade-bot
+
+WHAT IT IS: an hourly pipeline on a VM. A WhatsApp linked-device reader pulls new messages from one trading group, Gemini extracts structured trade actions, TradingView market data scores each outcome over five trading days, and pseudonymized records land in Supabase for a static dashboard.
+
+PREREQUISITES — I have all of these ready:
+- Oracle Cloud Always Free account
+- Ubuntu 24.04 ARM VM (Ampere A1: 4 OCPUs / 24 GB RAM) with a public IP; subnet security list allows TCP ingress on port 3001 from 0.0.0.0/0
+- My WhatsApp account on my phone (I can type in a pairing code)
+- Gemini API key (free tier)
+- Supabase project URL + service_role key
+- TradingView account (for outcome scoring)
+
+DO THIS IN ORDER. Verify each step before moving on.
+
+1. DEPLOY THE CODE
+Copy the repo to the VM. The VM directory is NOT a git repo — always deploy with scp, never git pull there:
+  scp -r . ubuntu@&lt;VM-IP&gt;:~/wa-trade-bot
+SSH in and install (Node 20, Python 3, Chromium, systemd units). It asks for a setup-UI admin password — have me choose one:
+  ssh ubuntu@&lt;VM-IP&gt;
+  bash ~/wa-trade-bot/deploy/install.sh
+
+2. OPEN THE SETUP UI
+http://&lt;VM-IP&gt;:3001/setup.html — HTTP Basic Auth, any username + the admin password from step 1. (Plain HTTP: fine for setup over a trusted network; don't expose it more broadly than needed.)
+
+3. LINK WHATSAPP
+In the UI, enter my phone number in international format (e.g. 15551234567) and get the pairing code — hand it to me immediately, codes expire. I type it into WhatsApp → Settings → Linked devices → "Link with phone number instead". Confirm the UI reports wa_paired: true before continuing.
+
+4. SAVE THE KEYS
+In the UI, paste the Gemini API key, the Supabase URL, and the Supabase service_role key. Then run the SQL shown in the UI's schema box once in the Supabase SQL editor — it creates the wa_trades and wa_meta tables with anon read-only access. Leave GEMINI_MODEL unset; the default model is used.
+
+5. SET THE GROUP
+Over SSH, set the trading group's name in ~/wa-trade-bot/.env:
+  WA_GROUP_QUERY="your group name"
+(Substring match on the WhatsApp group name; the reader only touches group chats and stays within this one group.)
+
+6. CONNECT TRADINGVIEW (outcome scoring)
+In the UI: start the TradingView auth, open the authorize URL, approve it, then paste the full callback URL (the one containing ?code=...) back into the UI. Tokens stay on the VM. Skip this if I don't need outcome scoring.
+
+7. RUN THE FIRST CYCLE
+In the UI press "Run a cycle now" — or over SSH: MANUAL_RUN=1 bash ~/wa-trade-bot/run-cycle.sh
+It pulls recent messages, parses trades, scores outcomes, and pushes to Supabase. Verify the cycle exits 0 and new rows appear in the wa_trades table.
+
+8. CONFIRM THE SCHEDULE
+sudo systemctl status wa-trade-bot-cycle.timer — the hourly pipeline runs 06:00–18:00 America/Los_Angeles only. Never schedule it overnight.
+
+9. OPEN THE DASHBOARD
+http://&lt;VM-IP&gt;:3001/ — it reads live from Supabase.
+
+HARD RULES
+- Never print, log, or commit: .env contents, data/messages.jsonl (raw chat), data/pseudonyms.json, phone numbers, sender names, group IDs, API keys, the admin password, or pairing codes. They are gitignored — keep them that way.
+- No git pull on the VM. Ever. Deploy with scp.
+- PUPPETEER_EXECUTABLE_PATH must be /snap/chromium/current/usr/lib/chromium-browser/chrome (the real binary). /snap/bin/chromium does NOT work inside systemd services.
+- Keep whatsapp-web.js's default Chrome/101 user agent; newer user agents land on WhatsApp's unsupported-browser page.
+- If anything fails, show me the exact error plus the log tail (the UI "Logs" section, or logs/cycle.log on the VM) before retrying.</span></div>
+      </div>
+    </section>
+
     <section class="cta wrap">
       <div class="cta-inner">
         <div>
@@ -537,6 +631,13 @@
       document.querySelectorAll('.ranges button').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
     }));
+    const copyBtn = document.getElementById('copyPrompt');
+    if (copyBtn) copyBtn.addEventListener('click', async (e) => {
+      const text = document.getElementById('setupPrompt').innerText;
+      try { await navigator.clipboard.writeText(text); e.target.textContent = 'Copied ✓'; }
+      catch (err) { e.target.textContent = 'Copy failed'; }
+      setTimeout(() => { e.target.textContent = 'Copy prompt'; }, 2000);
+    });
   </script>
 </body>
 </html>
