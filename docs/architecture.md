@@ -93,7 +93,7 @@ sequenceDiagram
     participant SB as Supabase
 
     T->>R: trigger (hourly)
-    R->>R: time gate — skip unless 06:00–18:00 PT<br/>(MANUAL_RUN=1 bypasses) [? 22:00 discrepancy — §6]
+    R->>R: time gate — skip unless 06:00–18:00 PT<br/>(MANUAL_RUN=1 bypasses)
     R->>RD: spawn (checkpoint from state.json)
     RD->>WA: load chats + loadEarlierMsgs loop<br/>(headless Chromium, linked device)
     RD->>FS: append messages.jsonl, update state.json
@@ -253,6 +253,6 @@ Production infrastructure (Oracle VM, Vercel, Supabase) is separated from third-
 5. What happens when a manual run overlaps a scheduled cycle?
 6. Is there any alerting on cycle failure, and where do Oracle-side logs go?
 7. `server.js` framework (Express vs. raw Node http) — for the container record.
-8. Time-gate discrepancy: the architecture review states 06:00–18:00 PT, but an older operator note says Oracle's `run-cycle.sh` gates 06:00–22:00 PT — which is live?
+8. Time-gate discrepancy — RESOLVED 2026-09-14: the live `run-cycle.sh` on Oracle gates 06:00–18:00 PT (verified via SSH: skips when `HOUR < 6` or `HOUR >= 18`). The older "06:00–22:00" figure was a stale note.
 9. `data/pseudonyms.json` permissions on Oracle (expected 0600) — still to verify.
 10. Package-lock identity verification and repo/history audit before any public launch.
