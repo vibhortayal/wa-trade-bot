@@ -2,6 +2,8 @@
 Description=Trade Flow hourly pull -> parse -> push cycle
 
 [Service]
+User=ubuntu
+Group=ubuntu
 Type=oneshot
 WorkingDirectory=%HOME%/wa-trade-bot
 ExecStart=/bin/bash %HOME%/wa-trade-bot/run-cycle.sh

@@ -4,6 +4,8 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+User=ubuntu
+Group=ubuntu
 Type=simple
 WorkingDirectory=%HOME%/wa-trade-bot
 EnvironmentFile=%HOME%/wa-trade-bot/.env
