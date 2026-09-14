@@ -274,11 +274,28 @@ async function tailLog() {
 
 async function copySql() {
   const t = document.getElementById('sqlbox').innerText;
+  const out = document.getElementById('sqlCopied');
+  const done = () => { out.innerHTML = '<span class="ok">copied ✓</span>'; };
+  const fail = () => { out.innerHTML = '<span class="no">copy failed — long-press the SQL to select it</span>'; };
+  // navigator.clipboard needs HTTPS; this page is plain HTTP, so fall back
+  // to the legacy execCommand path which works in insecure contexts.
   try {
-    await navigator.clipboard.writeText(t);
-    document.getElementById('sqlCopied').innerHTML = '<span class="ok">copied ✓</span>';
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(t);
+      done(); return;
+    }
+    throw new Error('insecure context');
   } catch (e) {
-    document.getElementById('sqlCopied').innerHTML = '<span class="no">copy failed — long-press the SQL to select it</span>';
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = t;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) done(); else fail();
+    } catch (e2) { fail(); }
   }
 }
 
