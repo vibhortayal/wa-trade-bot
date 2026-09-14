@@ -143,7 +143,7 @@ async function startPairing(phone) {
 // ---- HTTP plumbing ----
 function send(res, code, obj) {
   const body = JSON.stringify(obj);
-  res.writeHead(code, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) });
+  res.writeHead(code, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
   res.end(body);
 }
 function serveStatic(req, res) {
@@ -154,7 +154,7 @@ function serveStatic(req, res) {
   const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
   fs.readFile(file, (err, data) => {
     if (err) return send(res, 404, { error: 'not found' });
-    res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
     res.end(data);
   });
 }
