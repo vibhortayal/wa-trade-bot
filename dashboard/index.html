@@ -22,8 +22,9 @@
       <button data-mode="day" class="active">Day</button>
       <button data-mode="week">Week</button>
       <button data-mode="month">Month</button>
+      <button data-mode="custom">Custom</button>
     </div>
-    <span class="tip tip-below" data-tip="Time window: a single day, a 7-day week, or a 30-day month, ending on the date shown.">i</span>
+    <span class="tip tip-below" data-tip="Time window: a single day, the trading week (Mon–Fri), the calendar month, or a custom range you pick.">i</span>
     <div class="datenav">
       <button id="prevBtn" title="Previous">◀</button>
       <span id="dateLabel">–</span>
@@ -31,6 +32,10 @@
       <button id="todayBtn" class="ghost">Latest</button>
     </div>
     <span class="tip tip-below" data-tip="Step the window back or forward in time. “Latest” jumps back to the most recent data.">i</span>
+    <div id="customRow" class="customrow hidden">
+      <label>From <input type="date" id="customStart"></label>
+      <label>To <input type="date" id="customEnd"></label>
+    </div>
   </div>
 </header>
 

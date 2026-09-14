@@ -63,6 +63,14 @@ main { max-width: 1180px; margin: 0 auto; padding: 18px 22px 40px; }
 }
 .hidden { display: none; }
 
+.customrow { display: flex; gap: 12px; align-items: center; flex-basis: 100%; }
+.customrow.hidden { display: none; }
+.customrow label { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.customrow input[type="date"] {
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+  border-radius: 8px; padding: 6px 8px; font: inherit; color-scheme: dark;
+}
+
 .digest { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
 .stat {
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
