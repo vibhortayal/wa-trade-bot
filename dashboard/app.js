@@ -155,10 +155,9 @@ function buildInsights() {
   const hot = Object.entries(bt).filter(([, b]) => b.n >= 5)
     .map(([tr, b]) => ({ tr, hr: b.fav / b.n, ...b })).sort((a, b) => b.hr - a.hr)[0];
   if (hot && hot.hr >= 0.6) {
-    const you = hot.tr === "You";
-    out.push({ s: 4, t: you ? "You're running hot" : `${hot.tr} is running hot`,
+    out.push({ s: 4, t: `${hot.tr} is running hot`,
       d: `${hot.fav} of ${hot.n} scored trades favorable (${(hot.hr * 100).toFixed(0)}% hit rate).`,
-      a: you ? "Nice run — keep doing what's working." : `Their next idea deserves a closer look.${hot.n < 8 ? " Still a small sample — don't over-read it." : ""}` });
+      a: `Their next idea deserves a closer look.${hot.n < 8 ? " Still a small sample — don't over-read it." : ""}` });
   }
 
   // 6. options share surge
@@ -333,7 +332,7 @@ function renderTapeFilters() {
   $("filterToggle").innerHTML = `Filters${n ? ` (${n})` : ""} <span class="farrow">${state.showFilters ? "&#9652;" : "&#9662;"}</span>`;
   wrap.classList.toggle("hidden", !state.showFilters);
   const traders = [...new Set(DATA.trades.map(t => t.trader))]
-    .sort((a, b) => a === "You" ? -1 : b === "You" ? 1 : a.localeCompare(b, undefined, { numeric: true }));
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const syms = [...new Set(DATA.trades.filter(t => t.symbol).map(t => t.symbol))].sort();
   const sel = (id, label, opts, cur) => `
     <label class="tfilter"><span>${label}</span>
