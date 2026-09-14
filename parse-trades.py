@@ -192,7 +192,10 @@ def main():
 
     print(f"parsing {len(batch_msgs)} messages with text...", flush=True)
     results = []
-    B = 1
+    # Messages per LLM call. The prompt takes a JSON array and returns one
+    # record per message, so batching cuts API requests ~Bx for the same
+    # tokens. Tunable via PARSE_BATCH_SIZE.
+    B = max(1, int(os.environ.get("PARSE_BATCH_SIZE", "20")))
     done_ids = set()
     # resume from checkpoint if present
     ckpt_path = f"{DATA}/trades.json"
@@ -207,37 +210,40 @@ def main():
             pass
     import time
     n_skipped = 0
+    def checkpoint():
+        with open(ckpt_path, "w") as f:
+            json.dump(results, f, indent=1, ensure_ascii=False)
     for i in range(0, len(batch_msgs), B):
-        chunk = batch_msgs[i:i+B]
-        if chunk[0]["id"] in done_ids:
+        # Drop already-parsed messages individually: a chunk may straddle
+        # the resume boundary, and skipping it whole would lose messages.
+        chunk = [m for m in batch_msgs[i:i+B] if m["id"] not in done_ids]
+        if not chunk:
             continue
         if (i // B) % 20 == 0:
             print(f"  {i+1}/{len(batch_msgs)}...", flush=True)
-        if not looks_like_trade(chunk[0]):
-            # No trade signals — skip the Gemini call entirely.
-            results.append({"id": chunk[0]["id"], "no_trade": True, "trades": [],
-                            "note": "prefilter: no trade signals, Gemini call skipped"})
-            done_ids.add(chunk[0]["id"])
-            n_skipped += 1
-            with open(ckpt_path, "w") as f:
-                json.dump(results, f, indent=1, ensure_ascii=False)
-            continue
-        try:
-            res = call_llm(chunk)
-            assert len(res) == len(chunk), f"count mismatch: {len(res)} vs {len(chunk)}"
-        except Exception as e:
-            results.append({"id": chunk[0]["id"], "no_trade": True, "trades": [],
-                            "note": f"PARSE_FAILED: {e}"[:300]})
-            done_ids.add(chunk[0]["id"])
-            with open(ckpt_path, "w") as f:
-                json.dump(results, f, indent=1, ensure_ascii=False)
-            print(f"    parse failed for {chunk[0]['id']}: {e}", flush=True)
-            time.sleep(4)
-            continue
-        results.extend(res)
-        done_ids.update(r["id"] for r in res)
-        with open(ckpt_path, "w") as f:
-            json.dump(results, f, indent=1, ensure_ascii=False)
+        # Per-message prefilter: only trade-like messages spend an LLM call.
+        to_parse = [m for m in chunk if looks_like_trade(m)]
+        to_parse_ids = {m["id"] for m in to_parse}
+        for m in chunk:
+            if m["id"] not in to_parse_ids:
+                results.append({"id": m["id"], "no_trade": True, "trades": [],
+                                "note": "prefilter: no trade signals, Gemini call skipped"})
+                done_ids.add(m["id"])
+                n_skipped += 1
+        if to_parse:
+            try:
+                res = call_llm(to_parse)
+                assert len(res) == len(to_parse), f"count mismatch: {len(res)} vs {len(to_parse)}"
+            except Exception as e:
+                for m in to_parse:
+                    results.append({"id": m["id"], "no_trade": True, "trades": [],
+                                    "note": f"PARSE_FAILED: {e}"[:300]})
+                    done_ids.add(m["id"])
+                print(f"    parse failed for {len(to_parse)} msgs: {e}", flush=True)
+            else:
+                results.extend(res)
+                done_ids.update(r["id"] for r in res)
+        checkpoint()
         time.sleep(4)  # stay under free-tier RPM
     print(f"  {len(batch_msgs)}/{len(batch_msgs)} done", flush=True)
 
