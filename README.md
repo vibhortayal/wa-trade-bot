@@ -198,15 +198,34 @@ Retry, or try the other shape. What unblocked us: upgrading the tenancy to Pay
 As You Go (card on file, still free-tier eligible) with a budget alert as a
 safety net.
 
-**Pairing code never appears.** The #1 cause: Chromium can't launch from the
-systemd service. Snap's launcher (`/snap/bin/chromium`) refuses to run inside a
-service cgroup — point `PUPPETEER_EXECUTABLE_PATH` at the real binary instead:
+**Pairing code never appears / reads die instantly.** Symptom of Chromium never
+launching: the `chromium` snap's launcher (`/snap/bin/chromium`) refuses to run
+inside a systemd cgroup (`not a snap cgroup`), while working fine from an SSH
+shell. Point `PUPPETEER_EXECUTABLE_PATH` at the real binary instead:
 `/snap/chromium/current/usr/lib/chromium-browser/chrome`. `deploy/install.sh`
 does this for you.
+
+**Pairing stalls: code shown but the link never completes.** Pairing is a round
+trip — the VM's headless Chromium shows the code, you type it into WhatsApp on
+the phone, and WhatsApp confirms back. The link only counts when the setup UI
+reports `wa_paired: true`, which is derived from the `.wwebjs_auth/READY` marker
+file (written after the `ready` event plus a profile flush — not from session
+files existing). Codes expire within minutes. If it keeps failing, the VM holds
+a stale half-paired session: force re-pair (`POST /api/pair` with
+`{"phone": ..., "force": true}`, or the "Get a fresh code" button) wipes
+`.wwebjs_auth` and kills stray Chromium processes holding the profile lock.
 
 **`client.getChats()` throws a puppeteer error.** A known whatsapp-web.js /
 WA Web incompatibility (IndexedDB `DataError`). `read.js` bypasses it and reads
 the in-memory chat collections directly — don't "fix" it back.
+
+**Reader pulls no messages.** Two causes: (a) a fresh linked device takes up to
+~60s to populate the in-memory chat list — `read.js` polls
+`WAWebCollections.Chat.getModelsArray()` until it's non-empty, so just re-run;
+(b) the group filter — `WA_GROUP_QUERY` is a case-insensitive substring match
+on the group name, and groups are identified by `c.groupMetadata != null`. If
+it matches nothing, the pull is empty by design — check the "WhatsApp group to
+watch" value in the setup UI against the group's actual name in WhatsApp.
 
 **Cycle log shows `skip: outside 06:00–18:00 window`.** The timer only runs
 daytime PT. Use the setup UI's **Run a cycle now** button for an immediate run.
@@ -220,6 +239,13 @@ not by session files existing.
 connect TradingView (via the setup UI) or set `MARKET_DATA_PROVIDER=yahoo`
 (free, no key). Scoring is non-fatal: a market-data failure never blocks ingestion
 or the Supabase push.
+
+**Dashboard looks stale.** Check `/api/status` first: if `last_pull` /
+`last_parse` are old, the pipeline isn't running — check
+`wa-trade-bot-cycle.timer` and `logs/cycle.log`. If the tape is fresh but
+outcome badges are missing, the market-data source failed: scoring is non-fatal
+by design, so an expired TradingView token or an unreachable Yahoo just leaves
+scores blank. Reconnect in setup UI §3 or set `MARKET_DATA_PROVIDER=yahoo`.
 
 **Stray Chromium holds the profile lock.** If pairing or reads fail with
 profile-lock errors, a dead Chromium may still hold the Chrome profile. Kill
@@ -248,12 +274,17 @@ stable message id — if you still see dupes, check the checkpoint in `data/stat
 Check the API key / quota, then re-run.
 
 **Gemini quota / rate limits.** The free tier is limited; the parser backs off
-and retries in smaller batches. For heavier groups, set `LLM_API_BASE` /
-`LLM_API_KEY` / `LLM_MODEL` to any OpenAI-compatible endpoint in the setup UI.
+and retries in smaller batches, and unparseable messages are marked
+`PARSE_FAILED` and skipped individually. Easiest fixes first: set a backup key
+(`GEMINI_API_KEY_BACKUP` in the setup UI — automatic failover when the primary
+hits its quota), wait for the quota to reset, or point `LLM_API_BASE` /
+`LLM_API_KEY` / `LLM_MODEL` at any OpenAI-compatible endpoint.
 
-**Setup UI unreachable on :3001.** Open TCP 3001 in the VM firewall/security
-list, and run the services as the same OS user that installed Chromium
-(`ubuntu`, not `root` — root can't see the ubuntu-installed browser).
+**Setup UI unreachable on :3001.** The page won't load because Oracle blocks all
+ports by default — the subnet's security list needs a TCP ingress rule for port
+3001 (source `0.0.0.0/0`; see `deploy/`). Also run the services as the same OS
+user that installed Chromium (`ubuntu`, not `root` — root can't see the
+ubuntu-installed browser).
 
 **Deploying to the VM: it's not a git repo.** Copy files with `scp` (see
 `deploy/`); `git pull` won't work there by design.
