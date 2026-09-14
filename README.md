@@ -137,6 +137,10 @@ It reads live from Supabase when configured, and falls back to a baked-in
 - **Raw messages stay home.** `data/messages.jsonl` and the pseudonym map are
   gitignored and never committed. Only anonymized, structured actions reach
   Supabase.
+- **Anonymized before the LLM, too.** Trade extraction needs the message text,
+  so the text is sent to your configured LLM — but sender names, sender IDs,
+  and phone-like numbers are replaced with `Trader 01…N` labels and scrubbed
+  first (`pseudonyms.py`, shared with the dashboard so the numbers match).
 - **Read-only public data.** The Supabase schema enables Row Level Security:
   anonymous keys can only *read* `wa_trades`; writes require the service key
   that lives on your VM.

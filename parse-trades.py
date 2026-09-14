@@ -3,6 +3,10 @@
 import json, re, subprocess, sys, os
 from datetime import datetime, timezone
 
+# Shared pseudonym map (same "Trader NN" labels the dashboard uses).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pseudonyms import load_pseudos, save_pseudos, pseudo, is_from_me
+
 # Pre-filter: skip messages with no trade signals before spending a Gemini call.
 # Biased hard toward recall (100% on a 200-message calibration set) — a false
 # pass just costs one Gemini call, a false negative loses a trade forever.
@@ -23,6 +27,25 @@ def looks_like_trade(item):
     if q.get("text"):
         t += " " + q["text"]
     return bool(TRADE_HINT.search(t))
+
+# Phone-ish patterns are PII, not trade signal (same judgment the dashboard
+# already applies to notes). Scrubbed from message bodies pre-LLM. URLs and
+# ISO dates are protected first: a tweet ID or an expiry date is not a phone
+# number, and mangling them would hurt parsing.
+PHONE_HINT = re.compile(r"@?\+?\d[\d\-\s]{7,}\d(@[a-zA-Z]+)?")
+_PROTECT_HINT = re.compile(r"https?://\S+|\d{4}-\d{2}-\d{2}")
+def scrub_phones(t):
+    t = t or ""
+    protected = {}
+    def _hold(m):
+        k = f"\ue000{len(protected)}\ue001"  # private-use chars: can't collide with chat text
+        protected[k] = m.group(0)
+        return k
+    t = _PROTECT_HINT.sub(_hold, t)
+    t = PHONE_HINT.sub("", t)
+    for k, v in protected.items():
+        t = t.replace(k, v)
+    return t
 
 GEMINI = os.path.expanduser("~/workspace/skills/google-gemini/bin/gemini.py")
 # Repo-local data dir (works wherever the repo is cloned, not just the Hatch VM).
@@ -60,6 +83,7 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "")
 PROMPT = """You parse WhatsApp trading-group messages into structured trade records. Today is {today}.
 
 INPUT: a JSON array of messages. Each has id, date (YYYY-MM-DD), sender, text, and optionally quoted (the message being replied to, with its own sender/date/text).
+Note: "sender" is an anonymized label like "Trader 07" — real identities never reach you. Do not attempt to identify anyone; treat the label as an opaque speaker id.
 
 TASK: For each message, decide if it describes a TRADE ACTION by the sender (opening, adding to, trimming, closing a position; stating a held position; a conditional/planned order). Extract one record per distinct action in the message.
 
@@ -180,15 +204,27 @@ def main():
         print("no messages yet (nothing pulled), nothing to parse")
         return
     msgs = [json.loads(l) for l in open(msgs_path) if l.strip()]
+    # Pre-LLM anonymization: real sender names/IDs never leave the machine.
+    # Labels come from the shared map, so they're the same "Trader NN" names
+    # the dashboard shows — one numbering everywhere.
+    pseudos = load_pseudos()
+    def trader_of(sender_id, sender_name=None, from_me=False):
+        label, _ = pseudo(pseudos, sender_id, sender_name, from_me)
+        return label
     batch_msgs = []
     for idx, m in enumerate(msgs):
         if not m.get("body"):
             continue
         item = {"id": f"msg-{idx}", "date": datetime.fromtimestamp(int(m["t"]), tz=timezone.utc).strftime("%Y-%m-%d"),
-                "sender": m.get("senderName"), "text": m["body"]}
+                "sender": trader_of(m.get("senderId"), m.get("senderName"), is_from_me(m.get("fromMe"))),
+                "text": scrub_phones(m["body"])}
         if m.get("quoted") and m["quoted"].get("body"):
-            item["quoted"] = {"sender": m["quoted"].get("senderId"), "text": m["quoted"]["body"]}
+            item["quoted"] = {"sender": trader_of(m["quoted"].get("senderId")),
+                              "text": scrub_phones(m["quoted"]["body"])}
         batch_msgs.append(item)
+    # Persist newly assigned labels BEFORE the first LLM call, so a mid-run
+    # crash can't shift numbering on the retry.
+    save_pseudos(pseudos)
 
     print(f"parsing {len(batch_msgs)} messages with text...", flush=True)
     results = []

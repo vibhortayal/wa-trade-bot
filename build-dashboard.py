@@ -10,23 +10,20 @@ Reads data/trades.json + data/messages.jsonl, emits
 Also importable: build_records() -> list of scrubbed action dicts (used by
 push-supabase.py). Each record has a stable "id" (msg-<n>-<actionidx>).
 """
-import json, os, re
+import json, os, re, sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+# Shared pseudonym map (also used pre-LLM by parse-trades.py). The import is
+# path-bootstrapped because push-supabase.py loads this file via importlib
+# (which does not put the repo dir on sys.path).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pseudonyms import load_pseudos, save_pseudos, pseudo, is_from_me, PSEUDO_PATH
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
 OUT_DIR = os.path.expanduser("~/workspace/wa-trade-dashboard/data")
 PT = ZoneInfo("America/Los_Angeles")
-
-PSEUDO_PATH = os.path.join(DATA, "pseudonyms.json")  # private, never deployed
-
-
-def load_pseudos():
-    if os.path.exists(PSEUDO_PATH):
-        return json.load(open(PSEUDO_PATH))
-    return {}
-
 
 def build_records():
     msgs = [json.loads(l) for l in open(os.path.join(DATA, "messages.jsonl")) if l.strip()]
@@ -39,20 +36,16 @@ def build_records():
     except (OSError, ValueError):
         outcomes = {}
 
-    counter = [max([int(v.split()[1]) for v in pseudos.values()
-                    if v.startswith("Trader ")] or [0])]
-
-    def pseudo(sender_id, sender_name, from_me):
+    def trader_of(msg):
         nonlocal changed
         # Everyone — including the user's own messages — gets a stable,
         # anonymous "Trader NN" label. Never "You": nothing may reveal
         # which trader is the site owner.
-        key = sender_id or sender_name or ("__me__" if from_me else "unknown")
-        if key not in pseudos:
-            counter[0] += 1
-            pseudos[key] = f"Trader {counter[0]:02d}"
+        label, new = pseudo(pseudos, msg.get("senderId"), msg.get("senderName"),
+                            is_from_me(msg.get("fromMe")))
+        if new:
             changed = True
-        return pseudos[key]
+        return label
 
     out = []
     for r in results:
@@ -63,8 +56,7 @@ def build_records():
         msg = msgs[idx]
         ts = int(msg["t"])
         day = datetime.fromtimestamp(ts, PT).strftime("%Y-%m-%d")
-        trader = pseudo(msg.get("senderId"), msg.get("senderName"),
-                        str(msg.get("fromMe")).lower() == "true")
+        trader = trader_of(msg)
         for j, a in enumerate(r.get("trades", [])):
             note = (a.get("note") or "")
             note = re.sub(r"\d{5,}@\w+", "", note)           # strip raw ids
@@ -89,8 +81,7 @@ def build_records():
 
     out.sort(key=lambda x: x["ts"])
     if changed:
-        with open(PSEUDO_PATH, "w") as f:
-            json.dump(pseudos, f, indent=1)
+        save_pseudos(pseudos)
     return out
 
 
