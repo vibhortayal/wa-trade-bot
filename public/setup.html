@@ -165,6 +165,7 @@ async function refreshStatus() {
     const s = await api('/api/status');
     document.getElementById('status').innerHTML =
       row('WhatsApp linked', pill(s.wa_paired)) +
+      (s.pairing === 'starting' ? row('Pairing', '<span class="warn">● starting secure browser…</span>') : '') +
       (s.pairing === 'waiting' ? row('Pairing', '<span class="warn">● waiting for code…</span>') : '') +
       (s.pairing_error ? row('Pairing error', '<span class="no">' + esc(s.pairing_error) + '</span>') : '') +
       row('Gemini key', pill(s.gemini_configured)) +
@@ -183,18 +184,16 @@ const row = (k, v) => '<div class="stat"><span>' + k + '</span><span>' + v + '</
 async function pair() {
   const phone = document.getElementById('phone').value.trim();
   const out = document.getElementById('pairOut');
-  out.innerHTML = '<p class="hint">Requesting code…</p>';
+  if (!phone) { out.innerHTML = '<p class="no">Enter your phone number first.</p>'; return; }
+  out.innerHTML = '<p class="hint">Starting secure browser…</p>';
   try {
     const r = await api('/api/pair', { method: 'POST',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
     if (r.already) {
-      out.innerHTML = '<p class="hint">A session already exists on the server — but it may be stale. If the bot is not actually linked, start over:</p>' +
+      out.innerHTML = '<p class="ok">WhatsApp is already linked ✓</p>' +
         '<div class="row"><button class="secondary" onclick="pairFresh()">Pair again with a fresh code</button></div>';
-    }
-    else {
-      out.innerHTML = '<div class="code">' + esc(r.code) + '</div>' +
-        '<p class="hint">Type this code into WhatsApp on your phone, then wait — this page will update when linked.</p>';
-      pollPaired();
+    } else {
+      pollPairing();
     }
   } catch (e) { out.innerHTML = '<p class="no">Error: ' + esc(e.message) + '</p>'; }
   refreshStatus();
@@ -203,32 +202,55 @@ async function pairFresh() {
   const phone = document.getElementById('phone').value.trim();
   const out = document.getElementById('pairOut');
   if (!phone) { out.innerHTML = '<p class="no">Enter your phone number first.</p>'; return; }
-  out.innerHTML = '<p class="hint">Wiping the old session and requesting a fresh code…</p>';
+  out.innerHTML = '<p class="hint">Wiping the old session and starting fresh…</p>';
   try {
-    const r = await api('/api/pair', { method: 'POST',
+    await api('/api/pair', { method: 'POST',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, force: true }) });
-    out.innerHTML = '<div class="code">' + esc(r.code) + '</div>' +
-      '<p class="hint">Type this code into WhatsApp on your phone right away (codes expire fast), then wait — this page will update when linked.</p>';
-    pollPaired();
+    pollPairing();
   } catch (e) { out.innerHTML = '<p class="no">Error: ' + esc(e.message) + '</p>'; }
   refreshStatus();
 }
-async function pollPaired() {
-  for (let i = 0; i < 40; i++) {
-    await new Promise((r) => setTimeout(r, 5000));
-    try {
-      const s = await api('/api/status');
-      if (s.wa_paired) {
-        document.getElementById('pairOut').innerHTML = '<p class="ok">✓ WhatsApp linked!</p>';
-        refreshStatus(); return;
+// The server prepares the code in the background (browser launch takes ~30s);
+// poll until the code appears, then until the link completes.
+async function pollPairing() {
+  const out = document.getElementById('pairOut');
+  let sawCode = false, lastCode = null;
+  for (let i = 0; i < 100; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    let s;
+    try { s = await api('/api/status'); } catch { continue; }
+    if (s.wa_paired) {
+      out.innerHTML = '<p class="ok">✓ WhatsApp linked!</p>';
+      refreshStatus(); return;
+    }
+    if (s.pairing === 'failed') {
+      out.innerHTML = '<p class="no">Pairing failed: ' + esc(s.pairing_error || '') + '</p>' +
+        '<div class="row"><button class="secondary" onclick="pairFresh()">Try again with a fresh code</button></div>';
+      refreshStatus(); return;
+    }
+    if (s.pairing === 'waiting' && s.pairing_code) {
+      sawCode = true;
+      if (s.pairing_code !== lastCode) {
+        lastCode = s.pairing_code;
+        out.innerHTML = '<div class="code">' + esc(s.pairing_code) + '</div>' +
+          '<p class="hint">Type this code into WhatsApp on your phone right away (codes expire fast): ' +
+          'WhatsApp → Settings → Linked devices → Link a device → "Link with phone number instead".</p>';
       }
-      if (s.pairing === 'failed') {
-        document.getElementById('pairOut').innerHTML =
-          '<p class="no">Pairing failed: ' + esc(s.pairing_error || '') + '</p>';
-        refreshStatus(); return;
-      }
-    } catch {}
+      continue;
+    }
+    if (s.pairing === 'starting' && !sawCode) {
+      out.innerHTML = '<p class="hint">Starting secure browser… this takes about 30 seconds.</p>';
+      continue;
+    }
+    if (s.pairing === 'idle' && sawCode) {
+      out.innerHTML = '<p class="hint">The code expired before it was used.</p>' +
+        '<div class="row"><button class="secondary" onclick="pairFresh()">Get a fresh code</button></div>';
+      refreshStatus(); return;
+    }
   }
+  out.innerHTML = '<p class="hint">Still working — check the status above, or tap below to retry.</p>' +
+    '<div class="row"><button class="secondary" onclick="pairFresh()">Get a fresh code</button></div>';
+  refreshStatus();
 }
 
 async function saveKeys() {

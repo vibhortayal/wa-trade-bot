@@ -13,7 +13,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 
 const ROOT = __dirname;
 const PORT = parseInt(process.env.BOT_PORT || '3001', 10);
@@ -52,15 +52,43 @@ function loadEnvFile() {
 }
 loadEnvFile();
 
-const pairing = { state: 'idle', code: null, error: null }; // idle|waiting|paired|failed
+const pairing = { state: 'idle', code: null, codeAt: 0, error: null, client: null };
+// idle|starting|waiting|paired|failed. The READY marker is the durable proof of
+// a completed link: it is written only after WhatsApp fires 'ready', and
+// deleted on force re-pair / auth failure. Session files alone mean nothing
+// (Chromium creates them before any pairing completes).
+const READY_MARKER = path.join(ROOT, '.wwebjs_auth', 'READY');
 
-function sessionExists() {
+function log(msg) {
   try {
-    const dir = path.join(ROOT, '.wwebjs_auth');
-    const walk = (d) => fs.readdirSync(d, { withFileTypes: true })
-      .flatMap((e) => e.isDirectory() ? walk(path.join(d, e.name)) : [1]);
-    return walk(dir).length > 0;
-  } catch { return false; }
+    fs.mkdirSync(path.join(ROOT, 'logs'), { recursive: true });
+    fs.appendFileSync(path.join(ROOT, 'logs', 'server.log'),
+      new Date().toISOString() + ' ' + msg + '\n');
+  } catch {}
+}
+
+function waPaired() {
+  try { return fs.existsSync(READY_MARKER); } catch { return false; }
+}
+
+function killStrayBrowsers() {
+  // A leftover pairing/read Chromium holding the LocalAuth profile lock makes
+  // a fresh client.initialize() fail. Clear them before (re)pairing.
+  // (Bracket trick: keeps pkill from matching its own command line.)
+  for (const pat of ['[w]webjs_auth', '[n]ode read.js']) {
+    try { execSync(`pkill -f "${pat}" 2>/dev/null || true`); } catch {}
+  }
+}
+
+async function destroyPairingClient() {
+  if (pairing.client) {
+    const c = pairing.client; pairing.client = null;
+    try { await c.destroy(); } catch {}
+  }
+}
+
+function resetPairing() {
+  pairing.state = 'idle'; pairing.code = null; pairing.codeAt = 0; pairing.error = null;
 }
 
 function readJson(p, fallback) {
@@ -105,8 +133,9 @@ async function getStatus() {
     lastPull = st.mtime.toISOString();
   } catch {}
   return {
-    wa_paired: sessionExists(),
+    wa_paired: waPaired(),
     pairing: pairing.state,
+    pairing_code: pairing.state === 'waiting' ? pairing.code : null,
     pairing_error: pairing.error,
     last_pull: lastPull,
     parsed_messages: trades.length,
@@ -119,49 +148,98 @@ async function getStatus() {
   };
 }
 
-// ---- WhatsApp pairing (one-time). Keeps the client alive until the user
-// types the code on their phone; 'ready' then flushes the session to disk. ----
+// ---- WhatsApp pairing (one-time). Runs in the background: the page polls
+// /api/status for the code and for completion. The client is destroyed only
+// after 'ready' (destroying on 'authenticated' loses the session), and a READY
+// marker file records the completed link durably. ----
 async function startPairing(phone, force) {
+  await destroyPairingClient();
+  killStrayBrowsers();
   if (force) {
-    // User asked for a fresh code: kill any in-progress pairing client and
-    // wipe the (possibly stale) session so we start clean.
-    if (pairing.client) { try { await pairing.client.destroy(); } catch {} pairing.client = null; }
-    fs.rmSync(path.join(ROOT, '.wwebjs_auth'), { recursive: true, force: true });
-    pairing.state = 'idle'; pairing.code = null; pairing.error = null;
+    try { fs.rmSync(path.join(ROOT, '.wwebjs_auth'), { recursive: true, force: true }); } catch {}
+    resetPairing();
   }
-  if (sessionExists()) { pairing.state = 'paired'; return { already: true }; }
-  if (pairing.state === 'waiting') return { code: pairing.code };
+  if (pairing.state === 'waiting' && pairing.client) {
+    // A code is already out — refresh it if it's stale (codes expire fast).
+    if (pairing.code && Date.now() - pairing.codeAt < 90000) return;
+    try {
+      pairing.code = await pairing.client.requestPairingCode(phone);
+      pairing.codeAt = Date.now(); pairing.error = null;
+      log('pairing code refreshed');
+    } catch (e) {
+      pairing.state = 'failed'; pairing.error = e.message;
+      await destroyPairingClient();
+    }
+    return;
+  }
+  resetPairing();
+  pairing.state = 'starting';
+  log('pairing start (force=' + force + ')');
   const { Client, LocalAuth } = require('whatsapp-web.js');
-  const USE_PROXY = process.env.USE_PROXY === '1';
   const args = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'];
-  if (USE_PROXY) args.push('--proxy-server=http://127.0.0.1:18080', '--ignore-certificate-errors');
+  if (process.env.USE_PROXY === '1') args.push('--proxy-server=http://127.0.0.1:18080', '--ignore-certificate-errors');
 
-  pairing.state = 'waiting'; pairing.code = null; pairing.error = null;
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: path.join(ROOT, '.wwebjs_auth') }),
-    puppeteer: { headless: true, args },
+    puppeteer: {
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/snap/bin/chromium',
+      args,
+    },
   });
   pairing.client = client;
-  const cleanup = async () => { try { await client.destroy(); } catch {} pairing.client = null; };
-  client.on('auth_failure', async (m) => {
-    pairing.state = 'failed'; pairing.error = String(m);
-    await cleanup();
-  });
-  const onReady = async () => {
-    pairing.state = 'paired';
-    await cleanup(); // clean shutdown flushes the Chrome profile to disk
+  const fail = async (msg) => {
+    log('pairing failed: ' + msg);
+    pairing.state = 'failed'; pairing.error = msg;
+    await destroyPairingClient();
   };
-  client.on('authenticated', onReady);
-  client.on('ready', onReady);
-  client.on('disconnected', async (r) => {
-    if (pairing.state === 'waiting') { pairing.state = 'failed'; pairing.error = String(r); }
-    await cleanup();
+  client.on('code', (code) => {
+    pairing.state = 'waiting'; pairing.code = code; pairing.codeAt = Date.now(); pairing.error = null;
+    log('pairing code issued');
+    // Watchdog: codes expire; don't hold Chromium forever if the user walks away.
+    setTimeout(async () => {
+      if (pairing.state === 'waiting' && pairing.client === client) {
+        log('pairing code expired without completion, cleaning up');
+        await destroyPairingClient();
+        resetPairing();
+      }
+    }, 4 * 60 * 1000).unref();
   });
-  await client.initialize();
-  await new Promise((r) => setTimeout(r, 8000));
-  pairing.code = await client.requestPairingCode(phone);
-  // client stays alive until the phone completes pairing (see onReady)
-  return { code: pairing.code };
+  // NOTE: never destroy on 'authenticated' — the session only flushes to disk on 'ready'.
+  client.on('authenticated', () => { log('pairing client authenticated (waiting for ready)'); });
+  client.on('ready', async () => {
+    log('pairing client ready — link verified');
+    try { fs.writeFileSync(READY_MARKER, new Date().toISOString()); } catch {}
+    pairing.state = 'paired'; pairing.code = null; pairing.error = null;
+    await new Promise((r) => setTimeout(r, 2000)); // let the profile flush
+    await destroyPairingClient();
+  });
+  client.on('auth_failure', async (m) => {
+    try { fs.rmSync(READY_MARKER, { force: true }); } catch {}
+    await fail('auth_failure: ' + m);
+  });
+  client.on('disconnected', async (r) => {
+    log('pairing client disconnected: ' + r);
+    try { fs.rmSync(READY_MARKER, { force: true }); } catch {}
+    if (pairing.state !== 'paired') await fail('disconnected: ' + r);
+    else await destroyPairingClient();
+  });
+  try {
+    await client.initialize();
+  } catch (e) {
+    await fail('initialize failed: ' + e.message);
+    return;
+  }
+  // Cold starts need a moment before WhatsApp Web accepts the code request.
+  await new Promise((r) => setTimeout(r, 5000));
+  if (pairing.client !== client) return; // cleaned up while initializing
+  try {
+    const code = await client.requestPairingCode(phone);
+    pairing.state = 'waiting'; pairing.code = code; pairing.codeAt = Date.now();
+    log('pairing code issued');
+  } catch (e) {
+    await fail('requestPairingCode failed: ' + e.message);
+  }
 }
 
 // ---- HTTP plumbing ----
@@ -236,13 +314,15 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const phone = String(body.phone || '').replace(/\D/g, '');
       if (!/^\d{7,15}$/.test(phone)) return send(res, 400, { error: 'phone must be 7-15 digits with country code' });
-      try {
-        const r = await startPairing(phone, body.force === true);
-        return send(res, 200, r);
-      } catch (e) {
+      const force = body.force === true;
+      // Genuinely linked (READY marker present)? Nothing to do.
+      if (!force && waPaired()) return send(res, 200, { already: true });
+      // Otherwise start clean: stale session files without a completed link are
+      // wiped automatically. The page polls /api/status for the code and result.
+      startPairing(phone, true).catch((e) => {
         pairing.state = 'failed'; pairing.error = e.message;
-        return send(res, 500, { error: e.message });
-      }
+      });
+      return send(res, 200, { started: true });
     }
 
     if (req.method === 'POST' && url === '/api/keys') {
