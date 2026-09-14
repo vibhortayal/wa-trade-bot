@@ -57,7 +57,7 @@ You need: an Ubuntu VM (Oracle Cloud Always Free works — 4 ARM cores, 24 GB
 RAM, $0), a Gemini API key (free tier), and a Supabase project (free tier).
 
 ```bash
-# 1. Copy the repo to your VM (or clone your private fork)
+# 1. Copy the repo to your VM (or clone the repo)
 scp -r . ubuntu@<vm-ip>:~/wa-trade-bot
 
 # 2. Install: node, Chromium, systemd units (asks for a setup-UI password)
@@ -189,5 +189,4 @@ or the Supabase push.
 
 ## License
 
-Private. All rights reserved — this repo is the owner's personal trading
-intelligence stack, not open source (yet).
+MIT — free to use, modify, and self-host. See [LICENSE](LICENSE).

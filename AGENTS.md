@@ -84,7 +84,7 @@ production is https://wa-trade-flow.vercel.app.
 
 ## Deploy checklist
 
-1. `git commit` + `git push origin master` (private repo).
+1. `git commit` + `git push origin master` (your fork).
 2. `scp` changed files to `~/wa-trade-bot` on the VM (or re-run install for a
    fresh box).
 3. `node --check` / `bash -n` / `python3 -c "import ast…"` the changed files.

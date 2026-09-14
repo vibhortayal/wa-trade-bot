@@ -47,7 +47,7 @@ re-run Apply later — capacity for free shapes frees up sporadically.
 ## 3. Install the bot (~10 min)
 
 ```bash
-# on your laptop: copy this project to the VM (or git clone a private repo)
+# on your laptop: copy this project to the VM (or git clone the repo)
 scp -r ~/workspace/wa-trade-reader ubuntu@<vm-ip>:~/wa-trade-bot
 
 ssh ubuntu@<vm-ip>
