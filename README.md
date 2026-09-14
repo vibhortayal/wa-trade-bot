@@ -120,7 +120,7 @@ the bot to pipeline + setup UI only.
 - **Digest + trade tape** up front; outcome badges (✓/✗/–) with 5-day returns.
 - **Six tape filters** behind one toggle; instruments and actions merged into a
   single "Trade mix" panel.
-- **Traders tab** — per-member cards (activity, record, round trips, target
+- **Traders tab** — per-member cards (activity, record, target
   hits); tap a card for a bottom-sheet detail view.
 - **Insights** — top-4 ranked signals from 7 deterministic rules, or a calm
   "nothing unusual" state.
