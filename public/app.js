@@ -283,10 +283,9 @@ function outcomeBadge(t) {
       return `<span class="tipx oc oc-hit" data-tip="The price hit the $${o.target} target on ${o.target_hit_day}.">✓ target hit</span>`;
     return `<span class="tipx oc oc-pend" data-tip="Announced target: $${o.target}. Counts as hit if the price touches it within 14 days.">target $${o.target}</span>`;
   }
-  const rt = o.roundtrip ? ` · closed ${pctStr(o.roundtrip.ret)}` : "";
   const what = o.kind === "exit"
-    ? `In the 5 trading days after the exit the price moved ${pctStr(o.ret)}${rt}.`
-    : `Over the next 5 trading days the underlying moved ${pctStr(o.ret)}${rt}. Options are scored on the stock's direction, not the contract's profit.`;
+    ? `In the 5 trading days after the exit the price moved ${pctStr(o.ret)}.`
+    : `Over the next 5 trading days the underlying moved ${pctStr(o.ret)}. Options are scored on the stock's direction, not the contract's profit.`;
   if (o.favorable === true)
     return `<span class="tipx oc oc-good" data-tip="${esc(what)}">✓ ${pctStr(o.ret)}</span>`;
   if (o.favorable === false)
@@ -375,7 +374,7 @@ function renderTapeFilters() {
 /* summary of a slice — either the active filters or the tapped card's preview */
 function sliceStatsBits(list) {
   const traders = new Set();
-  let fav = 0, unf = 0, flat = 0, rt = 0, tgtHit = 0, tgt = 0;
+  let fav = 0, unf = 0, flat = 0, tgtHit = 0, tgt = 0;
   const rets = [];
   list.forEach(t => {
     traders.add(t.trader);
@@ -385,7 +384,6 @@ function sliceStatsBits(list) {
     const o = t.outcome;
     const r = (o.roundtrip && o.roundtrip.ret != null) ? o.roundtrip.ret : o.ret;
     if (r != null) rets.push(r);
-    if (o.roundtrip && o.roundtrip.ret != null) rt++;
     if (o.kind === "plan" && o.target != null) { tgt++; if (o.tgt_hit) tgtHit++; }
   });
   const scored = fav + unf + flat;
@@ -395,7 +393,6 @@ function sliceStatsBits(list) {
   if (scored) bits.push(`${fav} ✓ · ${unf} ✗ · ${flat} – <span class="tc-sub">of ${scored} scored</span>`);
   if (fav + unf) bits.push(`hit rate <b>${Math.round(fav / (fav + unf) * 100)}%</b>`);
   if (avg != null) bits.push(`avg move <b style="color:${avg >= 0 ? "var(--green)" : "var(--red)"}">${pctStr(avg)}</b>`);
-  if (rt) bits.push(`<b>${rt}</b> round trip${rt === 1 ? "" : "s"} closed`);
   if (tgt) bits.push(`<b>${tgtHit}/${tgt}</b> targets hit`);
   return bits;
 }
@@ -562,7 +559,7 @@ function renderTraders() {
   DATA.trades.filter(t => inWin.has(t.day)).forEach(t => {
     const d = by[t.trader] = by[t.trader] || {
       n: 0, days: new Set(), sym: {}, inst: {},
-      fav: 0, unf: 0, flat: 0, rt: [], tgtHit: 0, tgt: 0,
+      fav: 0, unf: 0, flat: 0, tgtHit: 0, tgt: 0,
     };
     d.n++; d.days.add(t.day);
     if (t.symbol) d.sym[t.symbol] = (d.sym[t.symbol] || 0) + 1;
@@ -573,7 +570,6 @@ function renderTraders() {
       else if (o.favorable === true) d.fav++;
       else if (o.favorable === false) d.unf++;
       else d.flat++;
-      if (o.roundtrip && o.roundtrip.ret != null) d.rt.push(o.roundtrip.ret);
     }
   });
   let rows = Object.entries(by).map(([name, d]) => ({ name, ...d, scored: d.fav + d.unf + d.flat }));
@@ -588,7 +584,6 @@ function renderTraders() {
   $("traderCards").innerHTML = rows.map(r => {
     const topSym = Object.entries(r.sym).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const instMix = Object.entries(r.inst).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    const avgRt = r.rt.length ? r.rt.reduce((a, b) => a + b, 0) / r.rt.length : null;
     const small = r.scored > 0 && r.scored < 5;
     return `<div class="tcard" data-trader="${esc(r.name)}">
       <div class="tc-head"><b>${esc(r.name)}</b>
@@ -602,7 +597,6 @@ function renderTraders() {
       </div>
       ${topSym.length ? `<div class="tc-row"><span class="tc-k">Favorites</span> ${topSym.map(([s, n]) => `${esc(s)} ×${n}`).join(" · ")}</div>` : ""}
       ${instMix.length ? `<div class="tc-row"><span class="tc-k">Mix</span> ${instMix.map(([k, n]) => `${k} ×${n}`).join(" · ")}</div>` : ""}
-      ${r.rt.length ? `<div class="tc-row"><span class="tc-k">Round trips</span> ${r.rt.length} closed · avg <b style="color:${avgRt >= 0 ? "var(--green)" : "var(--red)"}">${pctStr(avgRt)}</b></div>` : ""}
       ${r.tgt ? `<div class="tc-row"><span class="tc-k">Targets</span> ${r.tgtHit}/${r.tgt} hit</div>` : ""}
     </div>`;
   }).join("");
