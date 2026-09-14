@@ -3,6 +3,9 @@
 # Loads secrets from .env in this directory. Skips overnight (VM clock should be
 # America/Los_Angeles; install.sh sets the timezone).
 set -u
+# Fail the cycle if any stage fails — without this, `tail` pipelines mask
+# failures (tail exits 0) and we'd print a false "cycle done".
+set -o pipefail
 cd "$(dirname "$0")"
 
 if [ -f .env ]; then

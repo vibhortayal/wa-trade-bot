@@ -31,6 +31,26 @@ const client = new Client({
 client.on('auth_failure', (m) => { console.error('[read] AUTH FAILURE:', m); process.exit(1); });
 client.on('disconnected', (r) => { console.error('[read] disconnected:', r); process.exit(1); });
 
+// whatsapp-web.js can throw a "Target closed" race during teardown: its own
+// disconnect listener evaluates on the page while the browser is closing, and
+// the throw escapes destroy()'s promise via the event emitter. Work is done
+// by then, so exit with the intended code instead of crashing.
+let intendedExit = 0;
+process.on('uncaughtException', (err) => {
+  const msg = String((err && err.message) || err);
+  if (/Target closed|Target destroyed/i.test(msg)) {
+    console.error('[read] teardown race (ignoring):', msg.split('\n')[0]);
+    process.exit(intendedExit);
+  }
+  console.error('[read] FATAL:', err);
+  process.exit(1);
+});
+async function finish(code) {
+  intendedExit = code;
+  try { await client.destroy(); } catch (_) { /* ignore teardown races */ }
+  process.exit(code);
+}
+
 client.on('ready', async () => {
   try {
     const query = (process.argv[2] || '').toLowerCase();
@@ -47,7 +67,7 @@ client.on('ready', async () => {
       if (n > 0) { console.log(`[read] chat list synced (${n} chats)`); synced = true; break; }
       await sleep(10000);
     }
-    if (!synced) { console.error('[read] chat list never synced'); await client.destroy(); process.exit(1); }
+    if (!synced) { console.error('[read] chat list never synced'); await finish(1); }
 
     const res = await client.pupPage.evaluate(async (q, lim) => {
       const W = window.require;
@@ -118,8 +138,7 @@ client.on('ready', async () => {
     if (!res.matched.length) {
       console.log('[read] NO MATCH for query. Groups:');
       res.groups.forEach((g) => console.log('   -', g.name));
-      await client.destroy();
-      process.exit(2);
+      await finish(2);
     }
     if (res.matched.length > 1) {
       console.log('[read] MULTIPLE matches, using first:');
@@ -142,12 +161,10 @@ client.on('ready', async () => {
       fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
     }
     console.log(`[read] DONE: ${fresh.length} new messages appended (${res.messages.length} fetched)`);
-    await client.destroy();
-    process.exit(0);
+    await finish(0);
   } catch (e) {
     console.error('[read] ERROR:', e && e.stack ? e.stack.split('\n').slice(0, 6).join('\n') : JSON.stringify(e));
-    await client.destroy();
-    process.exit(1);
+    await finish(1);
   }
 });
 
