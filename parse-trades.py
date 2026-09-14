@@ -27,10 +27,29 @@ def looks_like_trade(item):
 GEMINI = os.path.expanduser("~/workspace/skills/google-gemini/bin/gemini.py")
 # Repo-local data dir (works wherever the repo is cloned, not just the Hatch VM).
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-# Self-hosted mode: use a personal Gemini API key directly (set GEMINI_API_KEY).
-# Otherwise falls back to the Hatch google-gemini skill CLI.
+# Self-hosted mode: use a personal Gemini API key directly (set GEMINI_API_KEY,
+# optionally GEMINI_API_KEY_BACKUP as an automatic failover when the primary
+# hits its quota). Otherwise falls back to the Hatch google-gemini skill CLI.
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_KEY_BACKUP = os.environ.get("GEMINI_API_KEY_BACKUP", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite"
+# Primary + optional backup key. On quota/rate-limit errors the parser fails
+# over to the next key instead of burning retries on an exhausted one.
+_GEMINI_KEYS = list(dict.fromkeys(
+    k for k in (GEMINI_API_KEY, GEMINI_API_KEY_BACKUP) if k))
+_key_idx = 0
+
+def _gemini_key():
+    return _GEMINI_KEYS[_key_idx % len(_GEMINI_KEYS)] if _GEMINI_KEYS else ""
+
+def _rotate_gemini_key():
+    """Move to the next configured key. Returns True when we actually
+    switched to a different key."""
+    global _key_idx
+    if len(_GEMINI_KEYS) < 2:
+        return False
+    _key_idx = (_key_idx + 1) % len(_GEMINI_KEYS)
+    return True
 # Generic LLM provider (optional): any OpenAI-compatible chat-completions API —
 # OpenAI, OpenRouter, Together, Ollama, vLLM, LM Studio, etc. Takes precedence
 # over GEMINI_API_KEY when set. Gemini remains the suggested free default.
@@ -63,10 +82,11 @@ MESSAGES:
 """
 
 def call_gemini_rest(payload):
-    """Direct Gemini API call using GEMINI_API_KEY (self-hosted mode)."""
+    """Direct Gemini API call using the active key (GEMINI_API_KEY primary,
+    GEMINI_API_KEY_BACKUP on failover)."""
     import urllib.request, urllib.error
     url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}")
+           f"{GEMINI_MODEL}:generateContent?key={_gemini_key()}")
     body = json.dumps({
         "contents": [{"parts": [{"text": payload}]}],
         "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
@@ -121,7 +141,7 @@ def call_llm(batch, tries=6):
                 if not LLM_API_KEY or not LLM_MODEL:
                     raise RuntimeError("LLM_API_BASE is set but LLM_API_KEY/LLM_MODEL is missing")
                 return call_openai_compat(payload)
-            if GEMINI_API_KEY:
+            if _GEMINI_KEYS:
                 return call_gemini_rest(payload)
             p = subprocess.run([sys.executable, GEMINI, "--json", "--temperature", "0.1"],
                                input=payload.encode(), capture_output=True, timeout=300)
@@ -129,6 +149,11 @@ def call_llm(batch, tries=6):
             last_err = f"{type(e).__name__}: {e}"
             if "HTTP 400" in last_err:
                 raise RuntimeError("llm failed: " + last_err)
+            quota_hit = ("429" in last_err or "quota" in last_err.lower()
+                         or "ResourceExhausted" in last_err)
+            if quota_hit and not LLM_API_BASE and _rotate_gemini_key():
+                print(f"    key quota hit, failing over to backup key"
+                      f" (attempt {attempt+1})...", flush=True)
             wait = min(2 ** attempt * 5, 120)
             print(f"    transport error, waiting {wait}s (attempt {attempt+1})...", flush=True)
             import time; time.sleep(wait)

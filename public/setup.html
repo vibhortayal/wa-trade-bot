@@ -65,6 +65,8 @@
   <h2>2 · API keys &amp; group</h2>
   <div class="fld-head"><label for="gemini_key" style="margin:0">Gemini API key (for parsing trades) <span class="hint" style="display:inline">— suggested free default</span></label><span><span class="fld-state" id="st_gemini_key"></span> <a href="#" class="fld-reset" onclick="return resetField('GEMINI_API_KEY','Gemini API key')">reset</a></span></div>
   <input id="gemini_key" type="password" placeholder="AIza…" autocomplete="off">
+  <div class="fld-head"><label for="gemini_key_backup" style="margin:8px 0 0">Backup Gemini API key <span class="hint" style="display:inline">— automatic failover when the primary hits its quota</span></label><span><span class="fld-state" id="st_gemini_key_backup"></span> <a href="#" class="fld-reset" onclick="return resetField('GEMINI_API_KEY_BACKUP','Backup Gemini API key')">reset</a></span></div>
+  <input id="gemini_key_backup" type="password" placeholder="AIza…" autocomplete="off">
   <details style="margin-top:6px">
     <summary class="hint" style="cursor:pointer">Use a different LLM instead (any OpenAI-compatible API)</summary>
     <div class="fld-head"><label for="llm_api_base" style="margin:8px 0 0">LLM API base URL</label><span><span class="fld-state" id="st_llm_api_base"></span> <a href="#" class="fld-reset" onclick="return resetField('LLM_API_BASE','LLM API base URL')">reset</a></span></div>
@@ -286,6 +288,7 @@ async function pollPairing() {
 async function saveKeys() {
   const body = {
     gemini_key: document.getElementById('gemini_key').value.trim(),
+    gemini_key_backup: document.getElementById('gemini_key_backup').value.trim(),
     llm_api_base: document.getElementById('llm_api_base').value.trim(),
     llm_api_key: document.getElementById('llm_api_key').value.trim(),
     llm_model: document.getElementById('llm_model').value.trim(),
@@ -302,6 +305,7 @@ async function saveKeys() {
     if ((r.cleared || []).length) parts.push('cleared: ' + r.cleared.join(', '));
     out.innerHTML = '<span class="ok">' + esc(parts.join(' · ') || 'nothing changed') + '</span>';
     document.getElementById('gemini_key').value = '';
+    document.getElementById('gemini_key_backup').value = '';
     document.getElementById('llm_api_key').value = '';
     document.getElementById('llm_api_base').value = '';
     document.getElementById('llm_model').value = '';
@@ -341,6 +345,7 @@ async function refreshConfig() {
     }
   };
   setState('st_gemini_key', c.gemini_key);
+  setState('st_gemini_key_backup', c.gemini_key_backup);
   setState('st_llm_api_base', c.llm_api_base, true);
   setState('st_llm_api_key', c.llm_api_key);
   setState('st_llm_model', c.llm_model, true);

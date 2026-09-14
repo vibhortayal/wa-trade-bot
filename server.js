@@ -343,6 +343,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const map = {
         gemini_key: 'GEMINI_API_KEY',
+        gemini_key_backup: 'GEMINI_API_KEY_BACKUP',
         llm_api_base: 'LLM_API_BASE',
         llm_api_key: 'LLM_API_KEY',
         llm_model: 'LLM_MODEL',
@@ -382,6 +383,7 @@ const server = http.createServer(async (req, res) => {
       const hint = (v) => v ? '••••' + String(v).slice(-4) : '';
       return send(res, 200, {
         gemini_key: { set: !!env.GEMINI_API_KEY, hint: hint(env.GEMINI_API_KEY) },
+        gemini_key_backup: { set: !!env.GEMINI_API_KEY_BACKUP, hint: hint(env.GEMINI_API_KEY_BACKUP) },
         llm_api_base: { set: !!env.LLM_API_BASE, value: env.LLM_API_BASE || '' },
         llm_api_key: { set: !!env.LLM_API_KEY, hint: hint(env.LLM_API_KEY) },
         llm_model: { set: !!env.LLM_MODEL, value: env.LLM_MODEL || '' },
