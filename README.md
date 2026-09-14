@@ -15,7 +15,7 @@ fully anonymized, running on your own hardware.
 
 ```
 WhatsApp group ──► read.js ──► parse-trades.py ──► score-outcomes.py ──► push-supabase.py ──► dashboard
-(linked device)    (hourly       (Gemini: extract    (TradingView: 5-day     (anonymized         (Vercel or
+(linked device)    (hourly       (Gemini: extract    (market data: 5-day    (anonymized         (Vercel or
                     pull)         trade actions)      returns, round trips)   upsert)             self-hosted)
 ```
 
@@ -155,7 +155,7 @@ public/setup.html    Setup UI · public/{index.html,app.js,styles.css}  Dashboar
 read.js              WhatsApp linked-device reader → data/messages.jsonl
 pair.js              One-time phone-code pairing helper
 parse-trades.py      Gemini extraction → data/trades.json
-score-outcomes.py    TradingView outcome scoring (5-day window, FIFO round trips)
+score-outcomes.py    Market-data outcome scoring (5-day window, FIFO round trips)
 push-supabase.py     Anonymized upsert → Supabase wa_trades / wa_meta
 run-cycle.sh         Full pipeline: pull → parse → score → push
 build-dashboard.py   Bakes data/trades.json into the static dashboard

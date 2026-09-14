@@ -37,7 +37,7 @@ Unresolved symbols / missing bars -> scored:false with a reason. Nothing is
 invented: no score is emitted without real bars.
 
 Env:
-  MARKET_DATA_PROVIDER  "tradingview" (default) or "stooq"
+  MARKET_DATA_PROVIDER  "tradingview" (default) or "yahoo"
   TV_CLI  path to tv.py (default: vendor/tradingview/tv.py next to this file)
   WINDOW  trading-day window (default 5)
   NOISE   flat band, e.g. 0.01 = 1% (default 0.01)

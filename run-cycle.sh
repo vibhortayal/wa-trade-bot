@@ -27,8 +27,10 @@ echo "=== $(date -u +%FT%TZ) cycle start ==="
 GROUP_QUERY="${WA_GROUP_QUERY:-your group name}"
 node read.js "$GROUP_QUERY" --limit 200 2>&1 | tail -2 || { echo "READ FAILED"; exit 1; }
 python3 parse-trades.py 2>&1 | tail -2 || { echo "PARSE FAILED"; exit 1; }
-# Outcome scoring via TradingView (needs `tv` login via the setup UI).
-# Non-fatal: a scoring failure still leaves fresh parsed trades to push.
+# Outcome scoring via the configured market-data provider
+# (MARKET_DATA_PROVIDER: tradingview, needs `tv` login via the setup UI;
+#  yahoo, free with no key). Non-fatal: a scoring failure still leaves fresh
+# parsed trades to push.
 python3 score-outcomes.py 2>&1 | tail -2 || echo "SCORE FAILED (continuing without fresh scores)"
 if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_KEY:-}" ]; then
   python3 push-supabase.py 2>&1 | tail -3 || { echo "PUSH FAILED"; exit 1; }

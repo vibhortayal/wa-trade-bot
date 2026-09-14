@@ -535,7 +535,7 @@
           </article>
           <article class="feature-row">
             <span class="n">05</span><h3>TradingView account</h3>
-            <div><p><span class="tag">OPTIONAL</span>&nbsp; Only needed for the five-day outcome scoring. The pipeline runs fine without it.</p></div>
+            <div><p><span class="tag">OPTIONAL</span>&nbsp; Only needed if you pick TradingView as the market-data source. Yahoo Finance (free, no key) scores outcomes with nothing to connect. The pipeline runs fine without either.</p></div>
           </article>
         </div>
         <div class="prompt-head">
@@ -577,7 +577,7 @@ In the setup UI, enter the trading group's name in the "WhatsApp group to watch"
 (Substring match on the WhatsApp group name; the reader only touches group chats and stays within this one group.)
 
 6. CONNECT TRADINGVIEW (outcome scoring)
-In the UI: start the TradingView auth, open the authorize URL, approve it, then paste the full callback URL (the one containing ?code=...) back into the UI. Tokens stay on the VM. Skip this if I don't need outcome scoring.
+In the UI: pick the market-data source first. For TradingView, start the auth, open the authorize URL, approve it, then paste the full callback URL (the one containing ?code=...) back into the UI -- tokens stay on the VM. For Yahoo Finance there is nothing to connect. Skip this if I don't need outcome scoring.
 
 7. RUN THE FIRST CYCLE
 In the UI press "Run a cycle now" — or over SSH: MANUAL_RUN=1 bash ~/wa-trade-bot/run-cycle.sh

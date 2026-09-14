@@ -59,9 +59,10 @@ Then open **http://\<vm-ip\>:3001**, log in with the password you chose, and:
 1. **Link WhatsApp** — enter your phone number, get the pairing code, type it
    into WhatsApp → Settings → Linked devices → *Link with phone number instead*.
 2. **Save keys** — paste the Gemini key, Supabase URL, and service_role key.
-3. **Connect TradingView** — get the login link, approve it in your browser,
-   then paste the localhost callback URL back into the UI. This powers the
-   per-trade outcome scoring (5-trading-day window, read-only market data).
+3. **Pick market data** — for TradingView, get the login link, approve it in
+   your browser, then paste the localhost callback URL back into the UI; or
+   pick Yahoo Finance in §3 (free, no key, nothing to connect). This powers
+   the per-trade outcome scoring (5-trading-day window, read-only market data).
 4. **Run a cycle now** — first pull takes a few minutes (chat history sync).
 
 The hourly timer takes over from there. The dashboard switches to live data

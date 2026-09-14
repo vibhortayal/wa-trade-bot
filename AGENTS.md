@@ -77,8 +77,8 @@ production is https://wa-trade-flow.vercel.app.
   stage failures and print a false `cycle done`. Keep it.
 - **`parse-trades.py` uses the repo-local `data/` dir** (not a hardcoded VM
   path) and exits cleanly when nothing has been pulled yet.
-- **Scoring is non-fatal by design.** TradingView failures must never block
-  WhatsApp ingestion or the Supabase push.
+- **Scoring is non-fatal by design.** Market-data provider failures must never
+  block WhatsApp ingestion or the Supabase push.
 - **Time gate:** the timer runs 06:00–18:00 America/Los_Angeles (user rule: no
   overnight processes). Manual runs set `MANUAL_RUN=1` to bypass.
 

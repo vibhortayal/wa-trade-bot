@@ -18,7 +18,7 @@ mkdir -p ~/workspace/wa-trade-reader/logs
   cd ~/workspace/wa-trade-reader || exit 1
   node read.js "your group name" --limit 200 2>&1 | tail -3 || { echo "READ FAILED"; exit 1; }
   python3 parse-trades.py 2>&1 | tail -3 || { echo "PARSE FAILED"; exit 1; }
-  # Outcome scoring is non-fatal: a TradingView failure must not block
+  # Outcome scoring is non-fatal: a market-data failure must not block
   # fresh parsed trades from reaching the dashboard.
   python3 score-outcomes.py 2>&1 | tail -2 || { echo "SCORE FAILED (non-fatal, continuing)"; }
   python3 build-dashboard.py 2>&1 | tail -2 || { echo "BUILD FAILED"; exit 1; }
