@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light" />
+  <meta name="theme-color" content="#f4f3ee" />
+  <link rel="icon" href="data:," />
+  <title>Trade Flow — Free, open-source WhatsApp trade intelligence</title>
+  <meta name="description" content="Free and open source under MIT: turn a WhatsApp trading group into a privacy-first trade tape on hardware you control." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --paper: #f4f3ee;
+      --ink: #111817;
+      --muted: #53605d;
+      --line: #cfd4cd;
+      --night: #13201e;
+      --night-2: #1a2b28;
+      --mint: #b8f34a;
+      --mint-deep: #5d9200;
+      --coral: #ff755d;
+      --white: #fffefa;
+      --shadow: 0 22px 60px rgba(22, 31, 28, .14);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "DM Sans", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    a { color: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    .wrap { width: min(1160px, calc(100% - 42px)); margin: 0 auto; }
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 24px;
+      padding: 22px 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .nav > a:not(.nav-cta) { text-decoration: none; color: var(--muted); }
+    .nav > a:not(.nav-cta):hover { color: var(--ink); }
+    .nav-cta {
+      text-decoration: none;
+      padding: 10px 15px;
+      background: var(--ink);
+      color: white;
+      border-radius: 8px;
+    }
+    .hero {
+      min-height: 680px;
+      padding: 58px 0 90px;
+      display: grid;
+      grid-template-columns: .86fr 1.14fr;
+      gap: clamp(44px, 7vw, 92px);
+      align-items: center;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      color: #344440;
+      font: 600 12px/1 "IBM Plex Mono", monospace;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      margin-bottom: 23px;
+    }
+    .eyebrow::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--mint-deep);
+      box-shadow: 0 0 0 4px rgba(93,146,0,.12);
+    }
+    h1 {
+      margin: 0;
+      max-width: 620px;
+      font-size: clamp(49px, 6.2vw, 82px);
+      line-height: .98;
+      letter-spacing: -.057em;
+      font-weight: 700;
+    }
+    .hero-copy > p {
+      max-width: 570px;
+      margin: 26px 0 0;
+      color: var(--muted);
+      font-size: clamp(17px, 1.6vw, 20px);
+      line-height: 1.55;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+    .btn {
+      min-height: 50px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 0 20px;
+      border-radius: 9px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform .16s ease, background .16s ease;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary { background: var(--ink); color: white; }
+    .btn-primary:hover { background: #27312f; }
+    .btn-secondary { border: 1px solid #aeb6ad; background: rgba(255,255,255,.38); }
+    .btn svg { width: 18px; height: 18px; }
+    .proof {
+      margin-top: 25px;
+      display: flex;
+      gap: 19px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font: 500 12px/1.4 "IBM Plex Mono", monospace;
+    }
+    .proof span { display: inline-flex; gap: 7px; align-items: center; }
+    .proof i { width: 6px; height: 6px; background: var(--mint-deep); border-radius: 50%; }
+    .privacy-note {
+      max-width: 570px;
+      margin-top: 21px;
+      padding: 14px 16px;
+      border-left: 3px solid var(--mint-deep);
+      color: #344440;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .privacy-note strong { color: var(--ink); }
+
+    .product-stage {
+      position: relative;
+      padding: 18px 0 18px 18px;
+    }
+    .product-stage::before {
+      content: "";
+      position: absolute;
+      inset: 0 48px 0 0;
+      background: var(--mint);
+      border-radius: 13px;
+      transform: rotate(-3.5deg);
+    }
+    .dashboard {
+      position: relative;
+      background: var(--night);
+      color: white;
+      border-radius: 15px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      transform: rotate(.8deg);
+    }
+    .dash-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .dash-label { font: 600 11px/1 "IBM Plex Mono", monospace; color: #8fa19c; letter-spacing: .08em; text-transform: uppercase; }
+    .ranges { display: flex; border: 1px solid #354641; border-radius: 7px; padding: 3px; gap: 3px; }
+    .ranges button, .dash-tabs button {
+      border: 0;
+      color: #98a8a4;
+      background: transparent;
+      font: 600 10px/1 "IBM Plex Mono", monospace;
+      padding: 7px 9px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .ranges button.active { color: #18201e; background: var(--mint); }
+    .dash-tabs { display: flex; gap: 5px; margin-bottom: 14px; border-bottom: 1px solid #2b3b37; }
+    .dash-tabs button { border-radius: 0; padding: 8px 2px; margin-right: 14px; }
+    .dash-tabs button.active { color: white; border-bottom: 2px solid var(--mint); }
+    .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .stat { background: var(--night-2); border-radius: 7px; padding: 13px; min-width: 0; }
+    .stat-label { color: #91a09d; font-size: 10px; line-height: 1.3; }
+    .stat strong { display: block; font: 600 20px/1.2 "IBM Plex Mono", monospace; margin-top: 7px; white-space: nowrap; }
+    .stat .good { color: var(--mint); }
+    .insight {
+      margin-top: 9px;
+      padding: 13px 14px;
+      background: rgba(184,243,74,.09);
+      border-top: 1px solid rgba(184,243,74,.35);
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 10px;
+      border-radius: 6px;
+    }
+    .spark { width: 22px; height: 22px; color: var(--mint); }
+    .insight strong { font-size: 12px; }
+    .insight p { margin: 3px 0 0; color: #b7c4c0; font-size: 10px; line-height: 1.45; }
+    .tape { margin-top: 15px; }
+    .tape-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+    .tape-head strong { font-size: 12px; }
+    .tape-head span { color: #8fa19c; font-size: 9px; }
+    .trade {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      gap: 11px;
+      align-items: center;
+      padding: 11px 0;
+      border-top: 1px solid #2a3935;
+    }
+    .avatar { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; background: #2c3d38; color: #cbd6d2; font: 600 9px/1 "IBM Plex Mono", monospace; }
+    .trade-main strong { display: block; font-size: 11px; }
+    .trade-main small { display: block; margin-top: 3px; color: #8fa19c; font-size: 9px; }
+    .outcome { padding: 5px 7px; border-radius: 5px; font: 600 9px/1 "IBM Plex Mono", monospace; }
+    .outcome.good { background: rgba(184,243,74,.13); color: var(--mint); }
+    .outcome.bad { background: rgba(255,117,93,.13); color: #ff9a87; }
+    .dash-note { color: #80908b; font-size: 9px; margin-top: 10px; text-align: right; }
+
+    .statement {
+      background: var(--ink);
+      color: white;
+      padding: 92px 0;
+    }
+    .statement-grid { display: grid; grid-template-columns: .72fr 1.28fr; gap: 80px; align-items: start; }
+    .section-num { color: var(--mint); font: 600 12px/1 "IBM Plex Mono", monospace; }
+    h2 { margin: 0; font-size: clamp(34px, 4vw, 56px); letter-spacing: -.045em; line-height: 1.04; }
+    .statement h2 { max-width: 720px; }
+    .statement p { color: #bac5c1; max-width: 710px; font-size: 18px; line-height: 1.6; margin: 23px 0 0; }
+    .flow { margin-top: 42px; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #39423f; }
+    .flow-step { padding: 22px 22px 0 0; position: relative; }
+    .flow-step::before { content: ""; position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--mint); top: -4px; left: 0; }
+    .flow-step b { font: 600 12px/1 "IBM Plex Mono", monospace; color: var(--mint); }
+    .flow-step h3 { margin: 13px 0 7px; font-size: 17px; }
+    .flow-step p { font-size: 13px; line-height: 1.5; margin: 0; color: #96a39f; }
+
+    .features { padding: 104px 0; }
+    .feature-head { display: grid; grid-template-columns: .72fr 1.28fr; gap: 80px; margin-bottom: 55px; }
+    .feature-list { border-top: 1px solid var(--line); }
+    .feature-row {
+      display: grid;
+      grid-template-columns: 66px .65fr 1.35fr;
+      gap: 28px;
+      padding: 29px 0;
+      border-bottom: 1px solid var(--line);
+      align-items: start;
+    }
+    .feature-row .n { font: 600 13px/1 "IBM Plex Mono", monospace; color: var(--mint-deep); padding-top: 4px; }
+    .feature-row h3 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+    .feature-row p { margin: 0; color: var(--muted); line-height: 1.65; max-width: 650px; }
+    .tags { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 13px; }
+    .tag { border: 1px solid #b7beb6; border-radius: 5px; padding: 5px 7px; font: 500 10px/1 "IBM Plex Mono", monospace; color: #46534f; }
+
+    .privacy { padding: 88px 0; background: #e6e9e1; }
+    .privacy-box { display: grid; grid-template-columns: .95fr 1.05fr; gap: 70px; align-items: center; }
+    .terminal {
+      background: #0e1715;
+      color: #d7e2de;
+      border-radius: 10px;
+      padding: 19px;
+      font: 500 12px/1.8 "IBM Plex Mono", monospace;
+      box-shadow: 10px 10px 0 var(--mint);
+      overflow: hidden;
+    }
+    .terminal-bar { display: flex; gap: 6px; margin-bottom: 13px; }
+    .terminal-bar i { width: 8px; height: 8px; border-radius: 50%; background: #40504c; }
+    .terminal .dim { color: #71847e; }
+    .terminal .ok { color: var(--mint); }
+    .privacy-copy p { color: var(--muted); line-height: 1.65; margin: 20px 0 0; font-size: 17px; }
+    .privacy-copy ul { list-style: none; padding: 0; margin: 25px 0 0; }
+    .privacy-copy li { display: flex; gap: 10px; margin: 12px 0; color: #2d3a37; }
+    .privacy-copy li::before { content: "✓"; color: var(--mint-deep); font-weight: 700; }
+
+    .cta { padding: 96px 0 38px; }
+    .cta-inner { background: var(--coral); padding: clamp(34px, 6vw, 68px); border-radius: 12px; display: grid; grid-template-columns: 1.25fr .75fr; gap: 40px; align-items: end; }
+    .cta h2 { max-width: 700px; }
+    .cta p { margin: 18px 0 0; max-width: 580px; color: #45251f; font-size: 17px; line-height: 1.55; }
+    .cta .actions { justify-content: flex-end; margin: 0; }
+    .cta .btn-secondary { border-color: rgba(17,24,23,.38); background: rgba(255,255,255,.18); }
+    footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 31px 0 38px; color: var(--muted); font-size: 12px; }
+    footer a { color: var(--ink); font-weight: 600; text-decoration: none; }
+
+    @media (max-width: 900px) {
+      .hero { grid-template-columns: 1fr; padding-top: 35px; }
+      .hero-copy { max-width: 690px; }
+      .product-stage { max-width: 690px; padding-left: 10px; }
+      .statement-grid, .feature-head { grid-template-columns: 1fr; gap: 22px; }
+      .privacy-box { grid-template-columns: 1fr; gap: 48px; }
+      .cta-inner { grid-template-columns: 1fr; align-items: start; }
+      .cta .actions { justify-content: flex-start; }
+    }
+    @media (max-width: 620px) {
+      .wrap { width: min(100% - 28px, 1160px); }
+      .nav { gap: 14px; padding: 16px 0; }
+      .nav > a:not(.nav-cta) { display: none; }
+      .nav-cta { width: 100%; text-align: center; }
+      .hero { min-height: auto; padding: 42px 0 66px; gap: 48px; }
+      h1 { font-size: 49px; }
+      .hero-copy > p { font-size: 17px; }
+      .actions { display: grid; grid-template-columns: 1fr; }
+      .btn { width: 100%; }
+      .proof { display: grid; gap: 8px; }
+      .product-stage { padding: 7px 5px 10px 0; }
+      .product-stage::before { inset: 0 8px 0 12px; }
+      .dashboard { padding: 15px; border-radius: 11px; transform: rotate(.2deg); }
+      .stat-row { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 5px; }
+      .stat { padding: 10px 8px; }
+      .stat strong { font-size: 14px; }
+      .stat-label { font-size: 8px; }
+      .ranges button { padding: 6px; font-size: 8px; }
+      .trade { grid-template-columns: 31px 1fr auto; gap: 7px; }
+      .statement, .features, .privacy { padding: 70px 0; }
+      .flow { grid-template-columns: 1fr 1fr; gap: 28px 14px; }
+      .flow-step { padding-right: 8px; }
+      .feature-row { grid-template-columns: 42px minmax(0, 1fr); gap: 12px; }
+      .feature-row > div { grid-column: 2; min-width: 0; }
+      .terminal { font-size: 10px; padding: 15px; box-shadow: 7px 7px 0 var(--mint); }
+      .cta { padding-top: 70px; }
+      .cta-inner { padding: 30px 22px; }
+      footer { flex-direction: column; align-items: flex-start; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .btn { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="wrap">
+    <nav class="nav" aria-label="Page navigation">
+      <a href="#privacy">Privacy</a>
+      <a href="#how">How it works</a>
+      <a href="https://wa-trade-flow.vercel.app" target="_blank" rel="noopener">Live demo</a>
+      <a class="nav-cta" href="https://github.com/vibhortayal/wa-trade-bot" target="_blank" rel="noopener">Star or fork on GitHub ↗</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero wrap">
+      <div class="hero-copy">
+        <div class="eyebrow">Free and open source · MIT</div>
+        <h1>Your trading chat, made legible.</h1>
+        <p>Trade Flow turns a noisy WhatsApp group into a structured trade tape—then shows what the crowd is trading, who is active, and how those calls played out. Run the complete stack on hardware you control.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://github.com/vibhortayal/wa-trade-bot" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2.8a9.2 9.2 0 0 0-2.9 17.93c.46.08.63-.2.63-.44v-1.78c-2.57.56-3.11-1.09-3.11-1.09-.42-1.07-1.03-1.36-1.03-1.36-.84-.57.07-.56.07-.56.93.07 1.42.95 1.42.95.83 1.42 2.17 1.01 2.7.77.08-.6.32-1.01.59-1.24-2.05-.23-4.21-1.03-4.21-4.55 0-1.01.36-1.83.95-2.48-.1-.23-.41-1.17.09-2.45 0 0 .77-.25 2.53.95A8.8 8.8 0 0 1 12 7.14a8.7 8.7 0 0 1 2.3.31c1.76-1.2 2.53-.95 2.53-.95.5 1.28.19 2.22.09 2.45.59.65.95 1.47.95 2.48 0 3.53-2.16 4.32-4.22 4.55.33.29.63.85.63 1.71v2.6c0 .24.17.53.64.44A9.2 9.2 0 0 0 12 2.8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+            Star or fork on GitHub
+          </a>
+          <a class="btn btn-secondary" href="https://wa-trade-flow.vercel.app" target="_blank" rel="noopener">Explore the live demo <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="proof" aria-label="Key characteristics">
+          <span><i></i> MIT licensed</span>
+          <span><i></i> A free Oracle Cloud VM works</span>
+          <span><i></i> Only pseudonymized records are published</span>
+        </div>
+        <div class="privacy-note"><strong>Privacy by design:</strong> raw chat and WhatsApp identities stay out of the dashboard. You choose the server, schedule, model connection, and database.</div>
+      </div>
+
+      <div class="product-stage" aria-label="Illustrative dashboard preview">
+        <div class="dashboard">
+          <div class="dash-top">
+            <span class="dash-label">Illustrative week view</span>
+            <div class="ranges" aria-label="Preview range">
+              <button type="button">Day</button><button type="button" class="active">Week</button><button type="button">Month</button>
+            </div>
+          </div>
+          <div class="dash-tabs" role="tablist" aria-label="Preview tabs">
+            <button type="button" class="active" data-preview="market" role="tab" aria-selected="true">Market</button>
+            <button type="button" data-preview="traders" role="tab" aria-selected="false">Traders</button>
+          </div>
+          <div id="market-preview">
+            <div class="stat-row">
+              <div class="stat"><span class="stat-label">Trade actions</span><strong>27</strong></div>
+              <div class="stat"><span class="stat-label">Active traders</span><strong>8</strong></div>
+              <div class="stat"><span class="stat-label">Outcomes</span><strong class="good">12 ✓</strong></div>
+            </div>
+            <div class="insight">
+              <svg class="spark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 2 1.7 6.3L20 10l-6.3 1.7L12 18l-1.7-6.3L4 10l6.3-1.7L12 2Z" stroke="currentColor" stroke-width="1.6"/><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z" fill="currentColor"/></svg>
+              <div><strong>Crowd activity is building</strong><p>Several traders moved into the same symbol this week. Read the tape before chasing the move.</p></div>
+            </div>
+            <div class="tape">
+              <div class="tape-head"><strong>Trade tape</strong><span>Structured, not raw chat</span></div>
+              <div class="trade"><div class="avatar">T03</div><div class="trade-main"><strong>Added · stock</strong><small>ACME · five-day direction check</small></div><span class="outcome good">✓ +3.1%</span></div>
+              <div class="trade"><div class="avatar">T07</div><div class="trade-main"><strong>Trimmed · call</strong><small>NOVA · options scored on underlying</small></div><span class="outcome bad">✕ −1.4%</span></div>
+              <div class="trade"><div class="avatar">T01</div><div class="trade-main"><strong>Planned · stock</strong><small>ORBIT · target waiting</small></div><span class="outcome good">Target</span></div>
+            </div>
+          </div>
+          <div id="trader-preview" hidden>
+            <div class="stat-row">
+              <div class="stat"><span class="stat-label">Most active</span><strong>T03</strong></div>
+              <div class="stat"><span class="stat-label">Scored calls</span><strong>18</strong></div>
+              <div class="stat"><span class="stat-label">Favorable</span><strong class="good">61%</strong></div>
+            </div>
+            <div class="tape">
+              <div class="tape-head"><strong>Pseudonymous activity</strong><span>Small samples labeled</span></div>
+              <div class="trade"><div class="avatar">T03</div><div class="trade-main"><strong>9 actions · 4 active days</strong><small>Stocks 56% · Calls 33% · Puts 11%</small></div><span class="outcome good">5 ✓</span></div>
+              <div class="trade"><div class="avatar">T07</div><div class="trade-main"><strong>6 actions · 3 active days</strong><small>Calls 67% · Stocks 33%</small></div><span class="outcome bad">2 ✓</span></div>
+              <div class="trade"><div class="avatar">T01</div><div class="trade-main"><strong>4 actions · 2 active days</strong><small>Small sample</small></div><span class="outcome good">3 ✓</span></div>
+            </div>
+          </div>
+          <div class="dash-note">Preview data is illustrative</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="statement" id="how">
+      <div class="wrap">
+        <div class="statement-grid">
+          <span class="section-num">01 / OPEN PIPELINE</span>
+          <div>
+            <h2>The complete pipeline is yours to inspect, change, and run.</h2>
+            <p>The MIT-licensed repository includes the reader, parser, outcome scorer, setup UI, database schema, and dashboard. Run it on your own hardware—a free Oracle Cloud VM is enough—and keep control of every connection.</p>
+          </div>
+        </div>
+        <div class="flow" aria-label="Data pipeline">
+          <div class="flow-step"><b>01</b><h3>Pull</h3><p>Connect, fetch since the last checkpoint, disconnect.</p></div>
+          <div class="flow-step"><b>02</b><h3>Parse</h3><p>Split buys, sells, plans, options, and quoted context.</p></div>
+          <div class="flow-step"><b>03</b><h3>Score</h3><p>Check five-trading-day direction and closed round trips.</p></div>
+          <div class="flow-step"><b>04</b><h3>Explore</h3><p>Review flow, outcomes, clusters, and trader activity.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" id="features">
+      <div class="wrap">
+        <div class="feature-head">
+          <span class="section-num">02 / SIGNAL</span>
+          <h2>Less chat archaeology. More useful questions.</h2>
+        </div>
+        <div class="feature-list">
+          <article class="feature-row">
+            <span class="n">01</span><h3>What did the group trade?</h3>
+            <div><p>A chronological tape separates actual actions from questions, reactions, and market chatter. Filter by symbol, instrument, action, outcome, expiry, or pseudonymous trader.</p><div class="tags"><span class="tag">BUY / ADD</span><span class="tag">TRIM / EXIT</span><span class="tag">STOCKS</span><span class="tag">OPTIONS</span></div></div>
+          </article>
+          <article class="feature-row">
+            <span class="n">02</span><h3>Where is the crowd leaning?</h3>
+            <div><p>See opening versus closing activity, call-versus-put balance, the most active symbols, and crowd clusters where several members converge on the same name.</p><div class="tags"><span class="tag">NET LEAN</span><span class="tag">PUT / CALL</span><span class="tag">CROWD CLUSTERS</span></div></div>
+          </article>
+          <article class="feature-row">
+            <span class="n">03</span><h3>Did the call work?</h3>
+            <div><p>Five-trading-day direction checks label favorable, unfavorable, and flat outcomes. Round trips and stated targets get their own treatment; options are explicitly scored on underlying direction, not fictional premium P&amp;L.</p><div class="tags"><span class="tag">5-DAY OUTCOME</span><span class="tag">ROUND TRIPS</span><span class="tag">TARGET HITS</span></div></div>
+          </article>
+          <article class="feature-row">
+            <span class="n">04</span><h3>Who contributes useful flow?</h3>
+            <div><p>The Traders view compares activity, active days, favorite symbols, instrument mix, scored outcomes, and completed trades without exposing member identities. Small samples stay labeled.</p><div class="tags"><span class="tag">PSEUDONYMS</span><span class="tag">ACTIVITY</span><span class="tag">SAMPLE SIZE</span></div></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="privacy" id="privacy">
+      <div class="wrap privacy-box">
+        <div class="terminal" aria-label="Example cycle log">
+          <div class="terminal-bar"><i></i><i></i><i></i></div>
+          <div><span class="dim">06:00</span> cycle start</div>
+          <div><span class="dim">06:01</span> new messages pulled</div>
+          <div><span class="dim">06:02</span> trade actions parsed</div>
+          <div><span class="dim">06:03</span> outcomes refreshed</div>
+          <div><span class="dim">06:03</span> identities pseudonymized</div>
+          <div><span class="ok">✓ dashboard updated</span></div>
+          <div><span class="dim">06:04</span> WhatsApp disconnected</div>
+        </div>
+        <div class="privacy-copy">
+          <span class="section-num">03 / PRIVACY BY DESIGN</span>
+          <h2 style="margin-top:16px">Your server. Your schedule. Your keys.</h2>
+          <p>Raw chat and WhatsApp identities are never published to the dashboard. The bot sends each message to the Gemini API you configure for extraction, then stores only structured, pseudonymized trade records for analysis.</p>
+          <ul>
+            <li>Stable pseudonyms replace names and phone numbers</li>
+            <li>Secrets and the WhatsApp session stay on your own machine</li>
+            <li>Hourly pull-and-disconnect cycle instead of a permanent session</li>
+            <li>Open-source code makes every data boundary inspectable</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta wrap">
+      <div class="cta-inner">
+        <div>
+          <h2>Free to run. Open to change.</h2>
+          <p>Trade Flow is open source under the MIT license. Star the project, fork it for your group, or explore the live demo before deploying it to your own hardware.</p>
+        </div>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://github.com/vibhortayal/wa-trade-bot" target="_blank" rel="noopener">Star or fork ↗</a>
+          <a class="btn btn-secondary" href="https://wa-trade-flow.vercel.app" target="_blank" rel="noopener">Open demo ↗</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap">
+    <span>Free and open source under MIT · built to run on your hardware.</span>
+    <span><a href="https://github.com/vibhortayal/wa-trade-bot" target="_blank" rel="noopener">Star / fork on GitHub</a> · <a href="https://wa-trade-flow.vercel.app" target="_blank" rel="noopener">Live demo</a></span>
+  </footer>
+
+  <script>
+    const tabs = document.querySelectorAll('[data-preview]');
+    const market = document.getElementById('market-preview');
+    const traders = document.getElementById('trader-preview');
+    tabs.forEach(tab => tab.addEventListener('click', () => {
+      const showTraders = tab.dataset.preview === 'traders';
+      tabs.forEach(t => { t.classList.toggle('active', t === tab); t.setAttribute('aria-selected', t === tab ? 'true' : 'false'); });
+      market.hidden = showTraders;
+      traders.hidden = !showTraders;
+    }));
+    document.querySelectorAll('.ranges button').forEach(btn => btn.addEventListener('click', () => {
+      document.querySelectorAll('.ranges button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }));
+  </script>
+</body>
+</html>
