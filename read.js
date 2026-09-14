@@ -154,7 +154,10 @@ client.on('ready', async () => {
     const key = `lastTs:${group.id}`;
     const lastTs = state[key] || 0;
     console.log(`[read] checkpoint ts: ${lastTs}, fetched: ${res.messages.length}`);
-    const fresh = res.messages.filter((m) => m.t > lastTs);
+    // >= (not >): timestamps are second-resolution, so two messages can share
+    // the boundary second. Re-appended stragglers are harmless: the parser
+    // dedupes by message id and Supabase upserts on id.
+    const fresh = res.messages.filter((m) => m.t >= lastTs);
     if (fresh.length) {
       fs.appendFileSync(MSG_FILE, fresh.map((m) => JSON.stringify({ group: group.name, groupId: group.id, ...m })).join('\n') + '\n');
       state[key] = Math.max(...fresh.map((m) => m.t));
