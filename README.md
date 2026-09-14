@@ -201,6 +201,43 @@ connect TradingView (via the setup UI) or set `MARKET_DATA_PROVIDER=yahoo`
 (free, no key). Scoring is non-fatal: a market-data failure never blocks ingestion
 or the Supabase push.
 
+**Stray Chromium holds the profile lock.** If pairing or reads fail with
+profile-lock errors, a dead Chromium may still hold the Chrome profile. Kill
+stray `chrome` processes, wipe `.wwebjs_auth`, and pair fresh — force re-pair
+does this for you.
+
+**WhatsApp shows an "unsupported browser" page.** `read.js` pins Chromium's user
+agent to whatsapp-web.js's default (Chrome/101 on Mac). Newer user agents get
+rejected by WhatsApp — don't override it.
+
+**`web.whatsapp.com` fails with `ERR_EMPTY_RESPONSE`.** Chromium ignores
+environment proxy variables. If the VM sits behind a proxy, run the local
+CONNECT forwarder (`local-proxy.js`, `USE_PROXY=1`) so the browser routes
+through it.
+
+**`TargetCloseError` right after `DONE`.** A harmless whatsapp-web.js teardown
+race — its disconnect listener fires on the closing page. `read.js` guards it;
+trust the exit code, not the stack trace.
+
+**Seeing duplicate trades.** Checkpoint-boundary re-reads can re-deliver the
+last message. `read.js` dedupes with `m.t >= lastTs` and the parser dedupes by
+stable message id — if you still see dupes, check the checkpoint in `data/state.json`.
+
+**`PARSE_FAILED` batches.** Messages the parser can't handle are marked
+`PARSE_FAILED` and skipped individually — one bad message never blocks the rest.
+Check the API key / quota, then re-run.
+
+**Gemini quota / rate limits.** The free tier is limited; the parser backs off
+and retries in smaller batches. For heavier groups, set `LLM_API_BASE` /
+`LLM_API_KEY` / `LLM_MODEL` to any OpenAI-compatible endpoint in the setup UI.
+
+**Setup UI unreachable on :3001.** Open TCP 3001 in the VM firewall/security
+list, and run the services as the same OS user that installed Chromium
+(`ubuntu`, not `root` — root can't see the ubuntu-installed browser).
+
+**Deploying to the VM: it's not a git repo.** Copy files with `scp` (see
+`deploy/`); `git pull` won't work there by design.
+
 ## Roadmap
 
 - [ ] Multi-group tracking with per-group dashboards
