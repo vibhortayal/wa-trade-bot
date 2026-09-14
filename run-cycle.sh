@@ -25,7 +25,10 @@ fi
 
 echo "=== $(date -u +%FT%TZ) cycle start ==="
 GROUP_QUERY="${WA_GROUP_QUERY:-your group name}"
-node read.js "$GROUP_QUERY" --limit 200 2>&1 | tail -2 || { echo "READ FAILED"; exit 1; }
+# Ingestion guardrail: MAX_MESSAGES_PER_CYCLE caps new messages per cycle
+# (default 200, ceiling 1000 enforced in read.js). .env is sourced above with
+# set -a, so the value is exported for read.js.
+node read.js "$GROUP_QUERY" --limit "${MAX_MESSAGES_PER_CYCLE:-200}" 2>&1 | tail -3 || { echo "READ FAILED"; exit 1; }
 python3 parse-trades.py 2>&1 | tail -2 || { echo "PARSE FAILED"; exit 1; }
 # Outcome scoring via the configured market-data provider
 # (MARKET_DATA_PROVIDER: tradingview, needs `tv` login via the setup UI;

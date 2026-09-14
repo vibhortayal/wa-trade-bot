@@ -152,6 +152,11 @@ async function getStatus() {
     const st = fs.statSync(path.join(ROOT, 'data', 'messages.jsonl'));
     lastPull = st.mtime.toISOString();
   } catch {}
+  let ingestion = null;
+  try {
+    const st8 = readJson(path.join(ROOT, 'data', 'state.json'), {});
+    if (st8.ingestion) ingestion = st8.ingestion;
+  } catch {}
   return {
     wa_paired: waPaired(),
     pairing: pairing.state,
@@ -160,6 +165,7 @@ async function getStatus() {
     last_pull: lastPull,
     parsed_messages: trades.length,
     parsed_actions: actions,
+    ingestion, // { cap, fresh, ingested, deferred, capped, at } from last read.js run
     last_parse: fs.existsSync(tradesPath) ? fs.statSync(tradesPath).mtime.toISOString() : null,
     llm_configured: !!(process.env.LLM_API_BASE || process.env.GEMINI_API_KEY),
     supabase_configured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
@@ -361,6 +367,7 @@ const server = http.createServer(async (req, res) => {
         supabase_service_key: 'SUPABASE_SERVICE_KEY',
         group_query: 'WA_GROUP_QUERY',
         market_data_provider: 'MARKET_DATA_PROVIDER',
+        max_messages_per_cycle: 'MAX_MESSAGES_PER_CYCLE',
       };
       const envPath = path.join(ROOT, '.env');
       let lines = [];
@@ -377,8 +384,12 @@ const server = http.createServer(async (req, res) => {
         }
         const val = String(body[field] || '').trim();
         if (!val) continue;
-        process.env[envKey] = val; // live for this process
-        const line = `${envKey}=${envQuote(val)}`;
+        // Ingestion guardrail: integer 1..1000, clamped server-side too.
+        const finalVal = envKey === 'MAX_MESSAGES_PER_CYCLE'
+          ? String(Math.min(1000, Math.max(1, parseInt(val, 10) || 200)))
+          : val;
+        process.env[envKey] = finalVal; // live for this process
+        const line = `${envKey}=${envQuote(finalVal)}`;
         if (idx >= 0) lines[idx] = line; else lines.push(line);
         saved.push(field);
       }
@@ -402,6 +413,8 @@ const server = http.createServer(async (req, res) => {
         group_query: { set: !!env.WA_GROUP_QUERY, value: env.WA_GROUP_QUERY || '' },
         market_data_provider: { set: !!env.MARKET_DATA_PROVIDER,
                                 value: env.MARKET_DATA_PROVIDER || 'tradingview' },
+        max_messages_per_cycle: { set: !!env.MAX_MESSAGES_PER_CYCLE,
+                                  value: env.MAX_MESSAGES_PER_CYCLE || '200' },
       });
     }
 

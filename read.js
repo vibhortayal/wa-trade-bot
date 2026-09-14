@@ -54,7 +54,25 @@ async function finish(code) {
 client.on('ready', async () => {
   try {
     const query = (process.argv[2] || '').toLowerCase();
-    const limit = parseInt((process.argv.find((a) => a === '--limit') && process.argv[process.argv.indexOf('--limit') + 1]) || '200', 10);
+    // Ingestion guardrail: cap how many NEW messages one cycle pulls in.
+    // Default 200 (matches historical behavior), hard ceiling 1000 — anything
+    // above that is a spam flood or a bug, never a real trading hour.
+    // Configure via MAX_MESSAGES_PER_CYCLE (setup UI or .env).
+    let cap = parseInt(process.env.MAX_MESSAGES_PER_CYCLE || '200', 10);
+    if (!Number.isFinite(cap)) cap = 200;
+    const clamped = Math.min(1000, Math.max(1, cap));
+    if (clamped !== cap) console.log(`[read] MAX_MESSAGES_PER_CYCLE=${cap} out of range, clamped to ${clamped}`);
+    cap = clamped;
+    // --limit can lower the cap for a one-off run, never raise it.
+    const li = process.argv.indexOf('--limit');
+    if (li >= 0) {
+      const v = parseInt(process.argv[li + 1], 10);
+      if (Number.isFinite(v) && v >= 1 && v < cap) {
+        console.log(`[read] --limit ${v} lowers ingestion cap to ${v} for this run`);
+        cap = v;
+      }
+    }
+    console.log(`[read] ingestion cap: ${cap} new messages/cycle`);
     if (!query) { console.error('[read] usage: node read.js "<group name query>" --limit 200'); process.exit(1); }
 
     console.log('[read] app ready, waiting for chat list sync...');
@@ -69,7 +87,15 @@ client.on('ready', async () => {
     }
     if (!synced) { console.error('[read] chat list never synced'); await finish(1); }
 
-    const res = await client.pupPage.evaluate(async (q, lim) => {
+    // Read the checkpoint BEFORE the pull: the in-page scan walks back past it
+    // to find the true set of new messages (not just the newest window).
+    let state = {};
+    try { state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (e) { /* fresh */ }
+
+    // Bound the backward scan: 5x the cap, max 3000 messages. Enough to find
+    // the checkpoint through any realistic flood without loading forever.
+    const scanCap = Math.min(cap * 5, 3000);
+    const res = await client.pupPage.evaluate(async (q, scanCap, state) => {
       const W = window.require;
       const chats = W('WAWebCollections').Chat.getModelsArray();
       const groups = chats
@@ -82,9 +108,14 @@ client.on('ready', async () => {
       const chat = W('WAWebCollections').Chat.get(WidFactory.createWid(matched[0].id));
       if (!chat) return { groups, matched, messages: null, err: 'chat not in collection' };
 
+      const sinceTs = (state && state['lastTs:' + matched[0].id]) || 0;
       let msgs = chat.msgs.getModelsArray().filter((m) => !m.isNotification);
       let guard = 0, newOnes = 1;
-      while (msgs.length < lim && guard++ < 30 && newOnes > 0) {
+      // Walk back until we pass the checkpoint (bounded by scanCap): this
+      // finds every new message so the cap ingests oldest-first, contiguously.
+      while (msgs.length < scanCap && guard++ < 60 && newOnes > 0) {
+        const oldest = msgs.reduce((m, x) => Math.min(m, x.t || Infinity), Infinity);
+        if (oldest < sinceTs) break;
         let loaded = [];
         try { loaded = await W('WAWebChatLoadMessages').loadEarlierMsgs({ chat }); } catch (e) { break; }
         newOnes = (loaded || []).filter((m) => !m.isNotification).length;
@@ -92,7 +123,9 @@ client.on('ready', async () => {
         else break;
       }
       msgs.sort((a, b) => a.t - b.t);
-      msgs = msgs.slice(-lim);
+      // truncated: hit the scan bound while still newer than the checkpoint —
+      // older unseen messages exist and will be skipped (logged loudly).
+      const truncated = msgs.length >= scanCap && msgs.length > 0 && msgs[0].t >= sinceTs;
 
       const Contacts = W('WAWebCollections').Contact;
       const out = msgs.map((m) => {
@@ -131,8 +164,8 @@ client.on('ready', async () => {
           quoted,
         };
       });
-      return { groups, matched, messages: out };
-    }, query, limit);
+      return { groups, matched, messages: out, truncated };
+    }, query, scanCap, state);
 
     console.log(`[read] groups found: ${res.groups.length}`);
     if (!res.matched.length) {
@@ -148,22 +181,41 @@ client.on('ready', async () => {
     console.log(`[read] reading group: ${group.name} (${group.id})`);
     if (res.err || !res.messages) { console.error('[read] failed to load chat:', res.err); process.exit(1); }
 
-    // checkpoint: only append messages newer than last run
-    let state = {};
-    try { state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (e) { /* fresh */ }
+    // checkpoint: only append messages newer than last run (state was read
+    // before the pull; the in-page scan already walked back past it)
     const key = `lastTs:${group.id}`;
     const lastTs = state[key] || 0;
-    console.log(`[read] checkpoint ts: ${lastTs}, fetched: ${res.messages.length}`);
+    console.log(`[read] checkpoint ts: ${lastTs}, scanned: ${res.messages.length}`);
+    // fresh is oldest-first (msgs was sorted ascending). Under the cap we
+    // ingest the oldest ones so the checkpoint advances contiguously — the
+    // remainder are genuinely deferred to the next cycle, not skipped.
     // >= (not >): timestamps are second-resolution, so two messages can share
     // the boundary second. Re-appended stragglers are harmless: the parser
     // dedupes by message id and Supabase upserts on id.
     const fresh = res.messages.filter((m) => m.t >= lastTs);
-    if (fresh.length) {
-      fs.appendFileSync(MSG_FILE, fresh.map((m) => JSON.stringify({ group: group.name, groupId: group.id, ...m })).join('\n') + '\n');
-      state[key] = Math.max(...fresh.map((m) => m.t));
-      fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    const capped = fresh.length > cap;
+    const toIngest = fresh.slice(0, cap);
+    if (toIngest.length) {
+      fs.appendFileSync(MSG_FILE, toIngest.map((m) => JSON.stringify({ group: group.name, groupId: group.id, ...m })).join('\n') + '\n');
+      state[key] = Math.max(...toIngest.map((m) => m.t));
     }
-    console.log(`[read] DONE: ${fresh.length} new messages appended (${res.messages.length} fetched)`);
+    state.ingestion = {
+      cap,
+      fresh: fresh.length,
+      ingested: toIngest.length,
+      deferred: fresh.length - toIngest.length,
+      capped: capped || !!res.truncated,
+      truncated: !!res.truncated,
+      at: new Date().toISOString(),
+    };
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    if (capped) {
+      console.log(`[read] INGESTION CAPPED: ${fresh.length} new messages, ingested oldest ${toIngest.length} (cap ${cap}); ${fresh.length - toIngest.length} deferred to next cycle`);
+    }
+    if (res.truncated) {
+      console.log('[read] WARNING: scan bound hit — messages older than the scan window were skipped');
+    }
+    console.log(`[read] DONE: ${toIngest.length} new messages appended (${res.messages.length} scanned)`);
     await finish(0);
   } catch (e) {
     console.error('[read] ERROR:', e && e.stack ? e.stack.split('\n').slice(0, 6).join('\n') : JSON.stringify(e));

@@ -172,6 +172,12 @@ create policy "service write meta" on wa_meta for all
 <section>
   <h2>4 · Run a cycle</h2>
   <p class="hint">Pulls new WhatsApp messages → parses trades with your LLM → scores outcomes with market data → pushes to Supabase.</p>
+  <div class="fld-head"><label for="max_messages_per_cycle" style="margin:8px 0 0">Max messages per cycle</label><span><span class="fld-state" id="st_max_messages_per_cycle"></span> <a href="#" class="fld-reset" onclick="return resetField('MAX_MESSAGES_PER_CYCLE','message cap')">reset</a></span></div>
+  <div class="row">
+    <input id="max_messages_per_cycle" type="number" min="1" max="1000" step="1" placeholder="200" style="max-width:120px">
+    <button onclick="saveIngestCap()">Save</button>
+  </div>
+  <p class="hint">Guardrail: caps how many new WhatsApp messages one cycle ingests (default 200, hard ceiling 1000). Anything over waits for the next cycle instead of burning LLM quota.</p>
   <div class="row">
     <button onclick="runCycle()">Run a cycle now</button>
     <button class="secondary" onclick="tailLog()">Refresh log</button>
@@ -205,6 +211,8 @@ async function refreshStatus() {
           pill(s.market_data_provider === 'yahoo' ? true : s.tv_connected)) +
       row('Messages pulled', s.parsed_messages ?? 0) +
       row('Trade actions', s.parsed_actions ?? 0) +
+      row('Message cap / cycle', esc(String((s.ingestion && s.ingestion.cap) || 200))) +
+      (s.ingestion && s.ingestion.capped ? row('Ingestion', '<span class="warn">● capped last cycle — ' + esc(String(s.ingestion.deferred || 0)) + ' deferred</span>') : '') +
       row('Last pull', esc(s.last_pull || '—')) +
       row('Last parse', esc(s.last_parse || '—'));
   } catch (e) {
@@ -316,6 +324,19 @@ async function saveKeys() {
   refreshConfig();
 }
 
+// Ingestion guardrail: max new WhatsApp messages per cycle (1..1000, clamped server-side).
+async function saveIngestCap() {
+  const out = document.getElementById('keysOut');
+  try {
+    const r = await api('/api/keys', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ max_messages_per_cycle: document.getElementById('max_messages_per_cycle').value }) });
+    out.innerHTML = '<span class="ok">' + esc((r.saved || []).join(', ') || 'nothing changed') + '</span>';
+  } catch (e) { out.innerHTML = '<span class="no">Error: ' + esc(e.message) + '</span>'; }
+  refreshStatus();
+  refreshConfig();
+}
+
 // Market-data provider for outcome scoring (TradingView account or free Yahoo).
 async function saveProvider() {
   const out = document.getElementById('keysOut');
@@ -352,6 +373,7 @@ async function refreshConfig() {
   setState('st_supabase_url', c.supabase_url, true);
   setState('st_supabase_service_key', c.supabase_service_key);
   setState('st_group_query', c.group_query, true);
+  setState('st_max_messages_per_cycle', c.max_messages_per_cycle, true);
   const mdp = document.getElementById('market_data_provider');
   if (mdp && c.market_data_provider) {
     mdp.value = c.market_data_provider.value || 'tradingview';

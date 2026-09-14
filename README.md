@@ -154,6 +154,7 @@ for you; `.env.example` documents every key.
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | Trade extraction (free tier works) |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` | Live data layer for the dashboard |
 | `WA_GROUP_QUERY` | Which group to pull (matched by name) |
+| `MAX_MESSAGES_PER_CYCLE` | Ingestion guardrail: max new messages per cycle (default `200`, ceiling `1000`) |
 | `PUPPETEER_EXECUTABLE_PATH` | Chromium binary (see Troubleshooting) |
 | `USE_PROXY` | `1` if Chromium needs the local CONNECT forwarder |
 | `SERVE_DASHBOARD` | `0` to stop serving the dashboard from the bot (setup UI stays up); default `1` |
