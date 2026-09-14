@@ -13,7 +13,9 @@ if [ -f .env ]; then
 fi
 
 HOUR=$(date +%H)
-if [ "$HOUR" -lt 6 ] || [ "$HOUR" -ge 18 ]; then
+# The timer keeps this window; a manual "Run a cycle now" from the setup UI
+# sets MANUAL_RUN=1 to bypass it (explicit user action, not an overnight run).
+if [ "${MANUAL_RUN:-0}" != "1" ] && { [ "$HOUR" -lt 6 ] || [ "$HOUR" -ge 18 ]; }; then
   echo "$(date -u +%FT%TZ) skip: outside 06:00-18:00 window"
   exit 0
 fi

@@ -25,13 +25,29 @@ if (BIND !== '127.0.0.1' && !ADMIN_PASSWORD) {
   process.exit(1);
 }
 
-// ---- tiny .env loader (KEY=VALUE lines, no quoting games) ----
+// ---- tiny .env loader (KEY=VALUE lines, quote-aware) ----
+// Values containing whitespace or shell-special chars are stored double-quoted
+// (see envQuote); the loader strips one layer of matching quotes so bash,
+// systemd EnvironmentFile, and this loader all agree on the value.
+function envQuote(val) {
+  if (/[\s"'`$\\#]/.test(val))
+    return '"' + val.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  return val;
+}
+function unquoteEnv(v) {
+  v = v.trim();
+  if (v.length >= 2 && v[0] === '"' && v[v.length - 1] === '"')
+    return v.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  if (v.length >= 2 && v[0] === "'" && v[v.length - 1] === "'")
+    return v.slice(1, -1);
+  return v;
+}
 function loadEnvFile() {
   const p = path.join(ROOT, '.env');
   if (!fs.existsSync(p)) return;
   for (const line of fs.readFileSync(p, 'utf8').split('\n')) {
     const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)=(.*)\s*$/);
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+    if (m && !process.env[m[1]]) process.env[m[1]] = unquoteEnv(m[2]);
   }
 }
 loadEnvFile();
@@ -237,7 +253,7 @@ const server = http.createServer(async (req, res) => {
         if (!val) continue;
         process.env[envKey] = val; // live for this process
         const idx = lines.findIndex((l) => l.startsWith(envKey + '='));
-        const line = `${envKey}=${val}`;
+        const line = `${envKey}=${envQuote(val)}`;
         if (idx >= 0) lines[idx] = line; else lines.push(line);
         saved.push(field);
       }
@@ -250,7 +266,9 @@ const server = http.createServer(async (req, res) => {
       fs.mkdirSync(path.dirname(log), { recursive: true });
       const out = fs.openSync(log, 'a');
       const child = spawn('bash', [path.join(ROOT, 'run-cycle.sh')], {
-        detached: true, stdio: ['ignore', out, out], env: process.env,
+        detached: true, stdio: ['ignore', out, out],
+        // A manual run is an explicit user action: bypass the 06:00-18:00 gate.
+        env: { ...process.env, MANUAL_RUN: '1' },
       });
       child.unref();
       return send(res, 200, { started: true });

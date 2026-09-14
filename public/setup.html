@@ -144,6 +144,8 @@ create policy "service write meta" on wa_meta for all
   <div class="row">
     <button onclick="runCycle()">Run a cycle now</button>
     <button class="secondary" onclick="tailLog()">Refresh log</button>
+    <button class="secondary" onclick="copyLog()">Copy log</button>
+    <span id="logCopied"></span>
   </div>
   <pre id="log">Log will appear here…</pre>
 </section>
@@ -277,17 +279,13 @@ async function tailLog() {
   } catch (e) { document.getElementById('log').textContent = 'Error: ' + e.message; }
 }
 
-async function copySql() {
-  const t = document.getElementById('sqlbox').innerText;
-  const out = document.getElementById('sqlCopied');
-  const done = () => { out.innerHTML = '<span class="ok">copied ✓</span>'; };
-  const fail = () => { out.innerHTML = '<span class="no">copy failed — long-press the SQL to select it</span>'; };
+async function copyText(t) {
   // navigator.clipboard needs HTTPS; this page is plain HTTP, so fall back
   // to the legacy execCommand path which works in insecure contexts.
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(t);
-      done(); return;
+      return true;
     }
     throw new Error('insecure context');
   } catch (e) {
@@ -299,9 +297,23 @@ async function copySql() {
       ta.focus(); ta.select();
       const ok = document.execCommand('copy');
       document.body.removeChild(ta);
-      if (ok) done(); else fail();
-    } catch (e2) { fail(); }
+      return !!ok;
+    } catch (e2) { return false; }
   }
+}
+
+async function copySql() {
+  const t = document.getElementById('sqlbox').innerText;
+  const out = document.getElementById('sqlCopied');
+  if (await copyText(t)) out.innerHTML = '<span class="ok">copied ✓</span>';
+  else out.innerHTML = '<span class="no">copy failed — long-press the SQL to select it</span>';
+}
+
+async function copyLog() {
+  const t = document.getElementById('log').innerText;
+  const out = document.getElementById('logCopied');
+  if (await copyText(t)) out.innerHTML = '<span class="ok">copied ✓</span>';
+  else out.innerHTML = '<span class="no">copy failed — long-press the log to select it</span>';
 }
 
 refreshStatus();
