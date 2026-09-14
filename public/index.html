@@ -3,16 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Trade Flow — Group Activity</title>
+<title>Trading Floor — Group Activity</title>
 <link rel="stylesheet" href="styles.css">
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="6d4c020c-affc-474c-aed2-271abfde1035"></script>
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
-    <div class="logo">◈</div>
+    <div class="logo"><svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="9" fill="#151b29"/><line x1="12" y1="7" x2="12" y2="27" stroke="#26a69a" stroke-width="2"/><rect x="8.5" y="11" width="7" height="9" rx="1.5" fill="#26a69a"/><line x1="23" y1="7" x2="23" y2="27" stroke="#ef5350" stroke-width="2"/><rect x="19.5" y="15" width="7" height="8" rx="1.5" fill="#ef5350"/></svg></div>
     <div>
-      <h1>Trade Flow</h1>
-      <p>What the group traded · updates hourly <span class="tip tip-below" data-tip="A bot reads the group chat hourly during market hours (8:30am–5pm ET, plus a midnight run) and extracts the trades people mention. Everyone is anonymous.">i</span></p>
+      <h1>Trading Floor</h1>
+      <p>Trades from a private WhatsApp group · updates hourly <span class="tip tip-below" data-tip="A bot reads a private WhatsApp group chat I'm part of, hourly during market hours (8:30am–5pm ET, plus a midnight run), and extracts the trades people mention. Not a public group. Everyone is anonymous.">i</span></p>
+      <p class="badge-row"><a class="tf-badge pill" href="https://vibhortayal.github.io/trade-flow/" target="_blank" rel="noopener"><span class="mk">◈</span>Built with TradeFlow</a></p>
+      <span id="healthPill" class="tipx health-pill health-idle"><span class="hdot"></span><span id="healthText">checking…</span></span>
     </div>
   </div>
   <div class="controls">
@@ -21,8 +24,9 @@
       <button data-mode="day" class="active">Day</button>
       <button data-mode="week">Week</button>
       <button data-mode="month">Month</button>
+      <button data-mode="custom">Custom</button>
     </div>
-    <span class="tip tip-below" data-tip="Time window: a single day, a 7-day week, or a 30-day month, ending on the date shown.">i</span>
+    <span class="tip tip-below" data-tip="Time window: a single day, the trading week (Mon–Fri), the calendar month, or a custom range you pick.">i</span>
     <div class="datenav">
       <button id="prevBtn" title="Previous">◀</button>
       <span id="dateLabel">–</span>
@@ -30,6 +34,10 @@
       <button id="todayBtn" class="ghost">Latest</button>
     </div>
     <span class="tip tip-below" data-tip="Step the window back or forward in time. “Latest” jumps back to the most recent data.">i</span>
+    <div id="customRow" class="customrow hidden">
+      <label>From <input type="date" id="customStart"></label>
+      <label>To <input type="date" id="customEnd"></label>
+    </div>
   </div>
 </header>
 
@@ -38,9 +46,10 @@
     <h2>How to read this page</h2>
     <button id="guideClose" class="ghost">Got it ✕</button>
   </div>
-  <p class="guide-intro">Every hour, a bot reads the trading group chat and pulls out the actual
-  trades people mention — buys, sells, options, plans. Everyone is anonymous
-  (<i>Trader 01, Trader 02…</i>): no names, no message text, just the trade itself.</p>
+  <p class="guide-intro">Every hour, a bot reads a private WhatsApp trading group I'm part of
+  and pulls out the actual trades people mention — buys, sells, options, plans.
+  This isn't a public group: it's my own group's tape, anonymized. No names, no message
+  text, just the trade itself (<i>Trader 01, Trader 02…</i>).</p>
   <dl class="guide-defs">
     <div><dt>Trade tape</dt><dd>Every action mentioned, in time order. The colored word is what they did:
       <b>BUY</b> opened · <b>ADD</b> added to one · <b>SELL</b> sold ·
