@@ -9,7 +9,7 @@
 - **Major containers:** (1) a whatsapp-web.js linked-device reader (`read.js`); (2) a Python pipeline (`pseudonyms.py`, `parse-trades.py`, `score-outcomes.py`, `push-supabase.py`, `build-dashboard.py`) orchestrated by `run-cycle.sh`; (3) a Node.js setup UI (`server.js`) on TCP 3001; (4) a static vanilla-JS dashboard hosted on Vercel.
 - **Data stores:** local JSONL/JSON files on the VM (`messages.jsonl`, `state.json` checkpoint, `pseudonyms.json` identity map — gitignored, mode 0600); Supabase Postgres (`wa_trades`, `wa_meta`) as the only cloud store, exposed to the dashboard via an anon key with RLS read-only.
 - **External dependencies:** WhatsApp Web (linked device via headless Chromium), an OpenAI-compatible LLM API (Gemini free-tier default), market data (TradingView via a vendored CLI using the operator's paid account, or Yahoo Finance), Supabase, Vercel CDN.
-- **Scheduling:** a systemd timer (`wa-trade-bot-cycle.timer`) fires hourly; cycles self-skip outside 06:00–18:00 America/Los_Angeles ("no overnight processes"). A setup-UI manual run sets `MANUAL_RUN=1` and bypasses the time gate. The former Hatch hourly cron was disabled 2026-09-14 — Oracle is the sole refresh path.
+- **Scheduling:** a systemd timer (`wa-trade-bot-cycle.timer`) fires hourly; cycles self-skip outside 08:30–17:00 America/New_York (market hours ±1h) plus a single midnight ET catch-up run. A setup-UI manual run sets `MANUAL_RUN=1` and bypasses the time gate. The former Hatch hourly cron was disabled 2026-09-14 — Oracle is the sole refresh path.
 - **Data flows:** WhatsApp messages → checkpointed pull → sender anonymization to stable `Trader NN` labels → LLM trade extraction → 5-trading-day outcome scoring → anonymized upsert to Supabase → dashboard reads live via PostgREST. Code deploys (Vercel, on git push) are decoupled from data refreshes (Supabase, hourly).
 - **Privacy design:** raw sender identities and phone-like strings are stripped *before* the LLM call; the LLM sees message text plus `Trader NN` labels only. `pseudonyms.json` never leaves the VM and never enters git. Residual risk: names written *inside* message bodies (e.g. "thanks Rahul") are not scrubbed.
 - **Known limits:** ingestion is capped per-cycle (`MAX_MESSAGES_PER_CYCLE`, default 200, hard ceiling 1000) — not per-hour; scoring failure is non-fatal and never blocks publishing; the setup UI listens on 0.0.0.0:3001 over plain HTTP (known exposure, mitigations pending).
@@ -58,7 +58,7 @@ flowchart TB
     OP["Operator"]
     PUB["Public viewers"]
 
-    TIMER -->|"scheduled job, hourly<br/>skips outside 06:00–18:00 PT"| PIPE
+    TIMER -->|"scheduled job, hourly<br/>skips outside 08:30–17:00 ET + midnight"| PIPE
     PIPE -->|"spawns Node child process"| READER
     UI -->|"spawns with MANUAL_RUN=1<br/>bypasses time gate"| PIPE
     OP -->|"HTTP plain + Basic Auth<br/>KNOWN RISK — see §6"| UI
@@ -93,7 +93,7 @@ sequenceDiagram
     participant SB as Supabase
 
     T->>R: trigger (hourly)
-    R->>R: time gate — skip unless 06:00–18:00 PT<br/>(MANUAL_RUN=1 bypasses)
+    R->>R: time gate — skip unless 08:30–17:00 ET<br/>or midnight ET (MANUAL_RUN=1 bypasses)
     R->>RD: spawn (checkpoint from state.json)
     RD->>WA: load chats + loadEarlierMsgs loop<br/>(headless Chromium, linked device)
     RD->>FS: append messages.jsonl, update state.json
@@ -137,7 +137,7 @@ sequenceDiagram
         C-->>S: 'ready' → write .wwebjs_auth/READY
         S-->>B: status polling → paired
         B->>S: POST /api/run
-        S->>R: spawn with MANUAL_RUN=1<br/>(bypasses 06:00–18:00 gate)
+        S->>R: spawn with MANUAL_RUN=1<br/>(bypasses ET time gate)
         B->>S: GET /api/config (masked) · POST /api/keys<br/>(group_query, key resets)
         B->>S: GET /api/status (ingestion stats,<br/>checkpoint, provider, capped warnings)
     end
@@ -253,6 +253,6 @@ Production infrastructure (Oracle VM, Vercel, Supabase) is separated from third-
 5. What happens when a manual run overlaps a scheduled cycle?
 6. Is there any alerting on cycle failure, and where do Oracle-side logs go?
 7. `server.js` framework (Express vs. raw Node http) — for the container record.
-8. Time-gate discrepancy — RESOLVED 2026-09-14: the live `run-cycle.sh` on Oracle gates 06:00–18:00 PT (verified via SSH: skips when `HOUR < 6` or `HOUR >= 18`). The older "06:00–22:00" figure was a stale note.
+8. Time-gate discrepancy — RESOLVED 2026-09-14: the live `run-cycle.sh` on Oracle gates 06:00–18:00 PT (verified via SSH: skips when `HOUR < 6` or `HOUR >= 18`). The older "06:00–22:00" figure was a stale note. SUPERSEDED 2026-09-14: schedule changed to 08:30–17:00 America/New_York plus a midnight ET catch-up run (ET-computed gate, VM-timezone independent).
 9. `data/pseudonyms.json` permissions on Oracle (expected 0600) — still to verify.
 10. Package-lock identity verification and repo/history audit before any public launch.

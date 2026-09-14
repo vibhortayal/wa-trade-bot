@@ -1,7 +1,8 @@
 #!/bin/bash
 # Full hourly cycle for self-hosted operation: pull -> parse -> push to Supabase.
-# Loads secrets from .env in this directory. Skips overnight (VM clock should be
-# America/Los_Angeles; install.sh sets the timezone).
+# Loads secrets from .env in this directory. Schedule: hourly 08:30-17:00
+# America/New_York (market hours +/- 1h buffer) plus a midnight ET catch-up run.
+# The gate is ET-based and does not depend on the VM clock timezone.
 set -u
 # Fail the cycle if any stage fails — without this, `tail` pipelines mask
 # failures (tail exits 0) and we'd print a false "cycle done".
@@ -15,11 +16,17 @@ if [ -f .env ]; then
   set +a
 fi
 
-HOUR=$(date +%H)
-# The timer keeps this window; a manual "Run a cycle now" from the setup UI
-# sets MANUAL_RUN=1 to bypass it (explicit user action, not an overnight run).
-if [ "${MANUAL_RUN:-0}" != "1" ] && { [ "$HOUR" -lt 6 ] || [ "$HOUR" -ge 18 ]; }; then
-  echo "$(date -u +%FT%TZ) skip: outside 06:00-18:00 window"
+# The timer fires hourly around the clock; this gate keeps the allowed windows.
+# A manual "Run a cycle now" from the setup UI sets MANUAL_RUN=1 to bypass it
+# (explicit user action).
+ET_MIN=$((10#$(TZ=America/New_York date +%H) * 60 + 10#$(TZ=America/New_York date +%M)))
+ALLOW=0
+# 00:00-00:59 ET midnight catch-up run, or 08:30-17:00 ET market-hours window
+if [ "$ET_MIN" -lt 60 ] || { [ "$ET_MIN" -ge 510 ] && [ "$ET_MIN" -le 1020 ]; }; then
+  ALLOW=1
+fi
+if [ "${MANUAL_RUN:-0}" != "1" ] && [ "$ALLOW" -eq 0 ]; then
+  echo "$(date -u +%FT%TZ) skip: outside 08:30-17:00 ET + midnight ET window"
   exit 0
 fi
 

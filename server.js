@@ -487,7 +487,7 @@ const server = http.createServer(async (req, res) => {
       const out = fs.openSync(log, 'a');
       const child = spawn('bash', [path.join(ROOT, 'run-cycle.sh')], {
         detached: true, stdio: ['ignore', out, out],
-        // A manual run is an explicit user action: bypass the 06:00-18:00 gate.
+        // A manual run is an explicit user action: bypass the ET time gate.
         env: { ...process.env, MANUAL_RUN: '1' },
       });
       child.unref();

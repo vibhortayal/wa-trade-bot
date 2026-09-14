@@ -25,7 +25,7 @@ non-obvious facts that cost real debugging time to learn.
 ssh -i ~/.ssh/id_ed25519 -o ProxyCommand='socat - PROXY:hatch-egress-proxy:%h:%p,proxyport=3128,proxyauth=$PROXY_CREDS' ubuntu@<vm-ip>
 
 systemctl status wa-trade-bot.service        # setup UI (:3001)
-systemctl status wa-trade-bot-cycle.timer    # hourly pipeline 06:00–18:00 PT
+systemctl status wa-trade-bot-cycle.timer    # hourly pipeline 08:30–17:00 ET + midnight ET
 journalctl -u wa-trade-bot.service --since -30m | tail -40
 
 # manual full cycle (bypasses the time gate, like the UI button does):
@@ -80,8 +80,9 @@ production is https://wa-trade-flow.vercel.app.
   path) and exits cleanly when nothing has been pulled yet.
 - **Scoring is non-fatal by design.** Market-data provider failures must never
   block WhatsApp ingestion or the Supabase push.
-- **Time gate:** the timer runs 06:00–18:00 America/Los_Angeles (user rule: no
-  overnight processes). Manual runs set `MANUAL_RUN=1` to bypass.
+- **Time gate:** run-cycle.sh allows 08:30–17:00 America/New_York plus a single
+  midnight ET catch-up run (ET-computed, VM-timezone independent).
+  Manual runs set `MANUAL_RUN=1` to bypass.
 
 ## Deploy checklist
 

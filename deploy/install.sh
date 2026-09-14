@@ -33,7 +33,7 @@ sudo apt-get install -y -qq libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
   libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
   libgbm1 libasound2t64 libpango-1.0-0 libcairo2 libx11-xcb1
 
-echo "==> timezone -> America/Los_Angeles (hourly window is 06:00-18:00 PT)"
+echo "==> timezone -> America/Los_Angeles (run window is ET-based: 08:30-17:00 + midnight)"
 sudo timedatectl set-timezone America/Los_Angeles || true
 
 echo "==> npm install"

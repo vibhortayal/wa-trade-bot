@@ -33,7 +33,7 @@ WhatsApp group ──► read.js ──► parse-trades.py ──► score-outco
 5. **View** — the dashboard renders a digest, a filterable trade tape, per-trader
    cards, and a rule-based insights feed.
 
-The whole cycle runs hourly on a systemd timer (`06:00–18:00 PT`), or on demand
+The whole cycle runs hourly on a systemd timer (`08:30–17:00 ET` plus a midnight ET catch-up run), or on demand
 from the setup UI.
 
 ## Features
@@ -163,7 +163,7 @@ for you; `.env.example` documents every key.
 | `USE_PROXY` | `1` if Chromium needs the local CONNECT forwarder |
 | `SERVE_DASHBOARD` | `0` to stop serving the dashboard from the bot (setup UI stays up); default `1` |
 
-The hourly timer runs `06:00–18:00 America/Los_Angeles`. A manual **Run a cycle
+The hourly timer runs `08:30–17:00 America/New_York` plus a single midnight ET run. A manual **Run a cycle
 now** from the setup UI bypasses the window (`MANUAL_RUN=1`).
 
 ## Project structure
@@ -232,8 +232,8 @@ on the group name, and groups are identified by `c.groupMetadata != null`. If
 it matches nothing, the pull is empty by design — check the "WhatsApp group to
 watch" value in the setup UI against the group's actual name in WhatsApp.
 
-**Cycle log shows `skip: outside 06:00–18:00 window`.** The timer only runs
-daytime PT. Use the setup UI's **Run a cycle now** button for an immediate run.
+**Cycle log shows `skip: outside 08:30–17:00 ET + midnight ET window`.** The timer only runs
+during the ET window above. Use the setup UI's **Run a cycle now** button for an immediate run.
 
 **Session lost after re-pairing.** The pairing client must stay alive until the
 `ready` event fires and the session flushes — killing it on `authenticated`

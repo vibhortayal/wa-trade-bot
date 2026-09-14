@@ -451,11 +451,11 @@
       <div class="wrap privacy-box">
         <div class="terminal" aria-label="Example cycle log">
           <div class="terminal-bar"><i></i><i></i><i></i></div>
-          <div><span class="dim">06:00</span> cycle start</div>
-          <div><span class="dim">06:01</span> new messages pulled</div>
-          <div><span class="dim">06:02</span> trade actions parsed</div>
-          <div><span class="dim">06:03</span> outcomes refreshed</div>
-          <div><span class="dim">06:03</span> identities pseudonymized</div>
+          <div><span class="dim">08:30</span> cycle start</div>
+          <div><span class="dim">08:31</span> new messages pulled</div>
+          <div><span class="dim">08:32</span> trade actions parsed</div>
+          <div><span class="dim">08:33</span> outcomes refreshed</div>
+          <div><span class="dim">08:33</span> identities pseudonymized</div>
           <div><span class="ok">✓ dashboard updated</span></div>
           <div><span class="dim">06:04</span> WhatsApp disconnected</div>
         </div>
@@ -584,7 +584,7 @@ In the UI press "Run a cycle now" — or over SSH: MANUAL_RUN=1 bash ~/wa-trade-
 It pulls recent messages, parses trades, scores outcomes, and pushes to Supabase. Verify the cycle exits 0 and new rows appear in the wa_trades table.
 
 8. CONFIRM THE SCHEDULE
-sudo systemctl status wa-trade-bot-cycle.timer — the hourly pipeline runs 06:00–18:00 America/Los_Angeles only. Never schedule it overnight.
+sudo systemctl status wa-trade-bot-cycle.timer — the hourly pipeline runs 08:30–17:00 America/New_York plus a midnight ET run.
 
 9. OPEN THE DASHBOARD
 http://&lt;VM-IP&gt;:3001/ — it reads live from Supabase.
