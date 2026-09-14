@@ -9,7 +9,7 @@ DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 # Self-hosted mode: use a personal Gemini API key directly (set GEMINI_API_KEY).
 # Otherwise falls back to the Hatch google-gemini skill CLI.
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite"
 
 PROMPT = """You parse WhatsApp trading-group messages into structured trade records. Today is {today}.
 
