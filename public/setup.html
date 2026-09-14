@@ -231,12 +231,17 @@ async function saveKeys() {
 
 async function tvStart() {
   const out = document.getElementById('tvOut');
-  out.innerHTML = '<p class="hint">Opening TradingView…</p>';
+  out.innerHTML = '<p class="hint">Contacting TradingView…</p>';
   try {
     const r = await api('/api/tv-auth-start', { method: 'POST' });
-    window.open(r.url, '_blank');
     document.getElementById('tvCb').style.display = 'block';
-    out.innerHTML = '<p class="hint">Approve in the TradingView tab, then paste the callback URL below.</p>';
+    // Render a real link the user taps (auto window.open is blocked as a
+    // popup on iOS when it happens after an async fetch).
+    out.innerHTML = '<div class="row"><a href="' + esc(r.url) + '" target="_blank" rel="noopener" ' +
+      'style="display:inline-block;padding:10px 16px;border-radius:8px;background:#4f7cff;color:#fff;text-decoration:none;">' +
+      'Open TradingView to approve</a></div>' +
+      '<p class="hint">Tap the button, approve, then come back here and paste the callback URL below. ' +
+      'Use the latest link if you tapped more than once.</p>';
   } catch (e) { out.innerHTML = '<p class="no">Error: ' + esc(e.message) + '</p>'; }
 }
 async function tvFinish() {
