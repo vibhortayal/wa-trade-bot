@@ -26,7 +26,7 @@
   .ok { color: #5fd68a; } .no { color: #e0685f; } .warn { color: #e0b45f; }
   .code { font-size: 2rem; letter-spacing: .35em; text-align: center; margin: 12px 0;
           font-weight: 700; color: #fff; }
-  pre#log { background: #0b0d11; border: 1px solid #262b36; border-radius: 8px;
+  pre#log, pre#sqlbox { background: #0b0d11; border: 1px solid #262b36; border-radius: 8px;
             padding: 10px; font-size: .75rem; max-height: 260px; overflow: auto;
             white-space: pre-wrap; word-break: break-word; }
   .hint { color: #9aa0ae; font-size: .85rem; margin: 6px 0; }
@@ -66,7 +66,61 @@
     <button onclick="saveKeys()">Save keys</button>
   </div>
   <p class="hint" id="keysOut"></p>
-  <p class="hint">After saving, run <code>supabase/schema.sql</code> once in your Supabase project's SQL editor.</p>
+  <p class="hint">After saving, create the tables (one-time): copy the SQL below, then in your Supabase dashboard → SQL Editor → New query → paste → Run.</p>
+</section>
+
+<section>
+  <h2>2b · Database tables (one-time)</h2>
+  <div class="row">
+    <button class="secondary" onclick="copySql()">Copy SQL</button>
+    <span class="hint" id="sqlCopied"></span>
+  </div>
+  <pre id="sqlbox">-- Trade Flow bot schema.
+-- Run once in the Supabase dashboard: SQL Editor &gt; New query &gt; paste &gt; Run.
+-- Tables hold ANONYMIZED trade actions only: no names, phone numbers,
+-- message text, or group identifiers.
+
+create table if not exists wa_trades (
+  id         text primary key,
+  day        date not null,
+  ts         bigint not null,
+  trader     text not null,
+  action     text not null,
+  symbol     text,
+  instrument text,
+  strike     numeric,
+  expiry     text,
+  price      numeric,
+  target     numeric,
+  quantity   text,
+  confidence text,
+  note       text,
+  outcome    jsonb,
+  created_at timestamptz default now()
+);
+create index if not exists wa_trades_day_idx on wa_trades (day desc);
+alter table wa_trades add column if not exists target numeric;
+alter table wa_trades add column if not exists outcome jsonb;
+
+create table if not exists wa_meta (
+  key        text primary key,
+  value      text not null,
+  updated_at timestamptz default now()
+);
+
+alter table wa_trades enable row level security;
+alter table wa_meta enable row level security;
+
+drop policy if exists "public read trades" on wa_trades;
+create policy "public read trades" on wa_trades for select using (true);
+drop policy if exists "public read meta" on wa_meta;
+create policy "public read meta" on wa_meta for select using (true);
+drop policy if exists "service write trades" on wa_trades;
+create policy "service write trades" on wa_trades for all
+  using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+drop policy if exists "service write meta" on wa_meta;
+create policy "service write meta" on wa_meta for all
+  using (auth.role() = 'service_role') with check (auth.role() = 'service_role');</pre>
 </section>
 
 <section>
@@ -216,6 +270,16 @@ async function tailLog() {
     el.textContent = r.log || '(empty log)';
     el.scrollTop = el.scrollHeight;
   } catch (e) { document.getElementById('log').textContent = 'Error: ' + e.message; }
+}
+
+async function copySql() {
+  const t = document.getElementById('sqlbox').innerText;
+  try {
+    await navigator.clipboard.writeText(t);
+    document.getElementById('sqlCopied').innerHTML = '<span class="ok">copied ✓</span>';
+  } catch (e) {
+    document.getElementById('sqlCopied').innerHTML = '<span class="no">copy failed — long-press the SQL to select it</span>';
+  }
 }
 
 refreshStatus();
