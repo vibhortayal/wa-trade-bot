@@ -572,8 +572,7 @@ In the UI, enter my phone number in international format (e.g. 15551234567) and 
 In the UI, paste the Gemini API key, the Supabase URL, and the Supabase service_role key. Then run the SQL shown in the UI's schema box once in the Supabase SQL editor — it creates the wa_trades and wa_meta tables with anon read-only access. Leave GEMINI_MODEL unset; the default model is used.
 
 5. SET THE GROUP
-Over SSH, set the trading group's name in ~/wa-trade-bot/.env:
-  WA_GROUP_QUERY="your group name"
+In the setup UI, enter the trading group's name in the "WhatsApp group to watch" field and save (it also shows the current value, and you can change or reset it any time). Alternatively, set WA_GROUP_QUERY in ~/wa-trade-bot/.env over SSH.
 (Substring match on the WhatsApp group name; the reader only touches group chats and stays within this one group.)
 
 6. CONNECT TRADINGVIEW (outcome scoring)

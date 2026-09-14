@@ -69,7 +69,9 @@ Then open **`http://<vm-ip>:3001/setup.html`** and:
 
 1. **Link WhatsApp** — enter your phone number, get the pairing code, type it
    into WhatsApp → Settings → Linked devices → *Link with phone number instead*.
-2. **Save your keys** — Gemini API key, Supabase URL + service key.
+2. **Save your keys** — Gemini API key, Supabase URL + service key. Set the
+   **WhatsApp group to watch** here too (it shows the current value, and every
+   field can be edited or reset from the UI).
 3. **Connect TradingView** — one-click OAuth so outcome scoring can pull bars.
 4. **Run the schema** — paste `supabase/schema.sql` once in the Supabase SQL
    editor (creates `wa_trades` / `wa_meta`, anon read-only via RLS).
