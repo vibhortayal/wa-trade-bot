@@ -15,6 +15,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawn, execSync } = require('child_process');
 
 const ROOT = __dirname;
@@ -113,6 +114,39 @@ function resetPairing() {
 
 function readJson(p, fallback) {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; }
+}
+
+// ---- auth hardening ----
+// Security headers on every response.
+const SEC_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+};
+// Timing-safe password compare: no early exit on content; buffers padded to
+// equal length so comparison time doesn't leak the password either.
+function safeEqual(a, b) {
+  const ab = Buffer.from(String(a)), bb = Buffer.from(String(b));
+  const len = Math.max(ab.length, bb.length, 1);
+  const pa = Buffer.alloc(len), pb = Buffer.alloc(len);
+  ab.copy(pa); bb.copy(pb);
+  return crypto.timingSafeEqual(pa, pb) && ab.length === bb.length;
+}
+// Brute-force guard: per-IP failure buckets, 10 failures per 10 min -> 429.
+const authFails = new Map(); // ip -> { count, resetAt }
+function authRateLimited(ip) {
+  const now = Date.now();
+  const e = authFails.get(ip);
+  if (!e || now > e.resetAt) { authFails.set(ip, { count: 0, resetAt: now + 10 * 60 * 1000 }); return false; }
+  return e.count >= 10;
+}
+function noteAuthFail(ip) {
+  const now = Date.now();
+  let e = authFails.get(ip);
+  if (!e || now > e.resetAt) e = { count: 0, resetAt: now + 10 * 60 * 1000 };
+  e.count += 1;
+  authFails.set(ip, e);
+  if (authFails.size > 1000) authFails.delete(authFails.keys().next().value); // bound memory
 }
 
 function tailFile(p, n = 80) {
@@ -272,7 +306,7 @@ async function startPairing(phone, force) {
 // ---- HTTP plumbing ----
 function send(res, code, obj) {
   const body = JSON.stringify(obj);
-  res.writeHead(code, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
+  res.writeHead(code, Object.assign({ 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' }, SEC_HEADERS));
   res.end(body);
 }
 function serveStatic(req, res) {
@@ -286,7 +320,7 @@ function serveStatic(req, res) {
   const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
   fs.readFile(file, (err, data) => {
     if (err) return send(res, 404, { error: 'not found' });
-    res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+    res.writeHead(200, Object.assign({ 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' }, SEC_HEADERS));
     res.end(data);
   });
 }
@@ -299,21 +333,49 @@ function readBody(req) {
 }
 function checkAuth(req, res) {
   if (!ADMIN_PASSWORD) return true;
+  const ip = req.socket.remoteAddress || 'unknown';
+  if (authRateLimited(ip)) {
+    res.writeHead(429, Object.assign({ 'Retry-After': '600' }, SEC_HEADERS));
+    res.end('too many attempts, try later');
+    return false;
+  }
   const h = req.headers.authorization || '';
   const m = h.match(/^Basic (.+)$/);
-  if (!m) {
-    res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="trade-flow-bot"' });
+  let ok = false;
+  if (m) {
+    try {
+      const pass = Buffer.from(m[1], 'base64').toString().split(':').slice(1).join(':');
+      ok = safeEqual(pass, ADMIN_PASSWORD);
+    } catch { ok = false; }
+  }
+  if (!ok) {
+    noteAuthFail(ip);
+    // Uniform 401 for every failure: no "no password" vs "wrong password" oracle.
+    res.writeHead(401, Object.assign({ 'WWW-Authenticate': 'Basic realm="trade-flow-bot"' }, SEC_HEADERS));
     res.end('auth required');
     return false;
   }
-  const pass = Buffer.from(m[1], 'base64').toString().split(':').slice(1).join(':');
-  if (pass !== ADMIN_PASSWORD) { send(res, 403, { error: 'wrong password' }); return false; }
+  authFails.delete(ip); // successful login resets the bucket
   return true;
 }
 
 const server = http.createServer(async (req, res) => {
   try {
     if (!checkAuth(req, res)) return;
+    // CSRF: browser POSTs always carry Origin/Referer. A cross-origin page
+    // triggering /api/* with cached Basic credentials gets a 403 here.
+    // Non-browser clients (curl) send no Origin and are unaffected.
+    if (req.method === 'POST') {
+      const origin = req.headers.origin || req.headers.referer || '';
+      if (origin) {
+        let oHost = '';
+        try { oHost = new URL(origin).host; } catch {}
+        if (oHost && oHost !== req.headers.host) {
+          log('csrf blocked: ' + origin);
+          return send(res, 403, { error: 'forbidden' });
+        }
+      }
+    }
     const url = req.url.split('?')[0];
 
     if (req.method === 'GET' && url === '/api/status') return send(res, 200, await getStatus());
@@ -321,7 +383,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url === '/api/tv-auth-start') {
       const r = await tvRun(['auth', '--start']);
       const m = r.out.match(/https:\/\/www\.tradingview\.com\/mcp\/oauth\/authorize\?[^\s"']+/);
-      if (!m) return send(res, 500, { error: (r.err || r.out || 'auth start failed').slice(0, 300) });
+      if (!m) { log('tv-auth-start failed: ' + (r.err || r.out).slice(0, 500)); return send(res, 500, { error: 'auth start failed' }); }
       return send(res, 200, { url: m[0] });
     }
 
@@ -332,7 +394,7 @@ const server = http.createServer(async (req, res) => {
         return send(res, 400, { error: 'paste the full callback URL containing ?code=…' });
       }
       const r = await tvRun(['auth', '--callback', cb]);
-      if (r.code !== 0) return send(res, 500, { error: (r.err || r.out || 'callback failed').slice(0, 300) });
+      if (r.code !== 0) { log('tv-auth-callback failed: ' + (r.err || r.out).slice(0, 500)); return send(res, 500, { error: 'callback failed' }); }
       return send(res, 200, { ok: true, connected: await tvConnected() });
     }
 
@@ -394,6 +456,7 @@ const server = http.createServer(async (req, res) => {
         saved.push(field);
       }
       fs.writeFileSync(envPath, lines.filter((l) => l.trim()).join('\n') + '\n', { mode: 0o600 });
+      try { fs.chmodSync(envPath, 0o600); } catch {} // mode on create isn't enough; enforce on every write
       return send(res, 200, { saved, cleared });
     }
 
@@ -434,7 +497,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET') return serveStatic(req, res);
     return send(res, 404, { error: 'not found' });
   } catch (e) {
-    return send(res, 500, { error: e.message });
+    // Never leak internals (paths, stack traces) to the client; log them.
+    log('request failed: ' + (e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : String(e)).slice(0, 500));
+    return send(res, 500, { error: 'internal error' });
   }
 });
 
