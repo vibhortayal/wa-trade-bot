@@ -31,6 +31,12 @@ DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 # Otherwise falls back to the Hatch google-gemini skill CLI.
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite"
+# Generic LLM provider (optional): any OpenAI-compatible chat-completions API —
+# OpenAI, OpenRouter, Together, Ollama, vLLM, LM Studio, etc. Takes precedence
+# over GEMINI_API_KEY when set. Gemini remains the suggested free default.
+LLM_API_BASE = os.environ.get("LLM_API_BASE", "").rstrip("/")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LLM_MODEL = os.environ.get("LLM_MODEL", "")
 
 PROMPT = """You parse WhatsApp trading-group messages into structured trade records. Today is {today}.
 
@@ -77,12 +83,44 @@ def call_gemini_rest(payload):
     return json.loads(text)
 
 
-def call_gemini(batch, tries=6):
+def call_openai_compat(payload):
+    """Any OpenAI-compatible chat-completions API (OpenAI, OpenRouter, Ollama,
+    vLLM, LM Studio...). Deliberately avoids response_format so providers
+    without JSON-mode support (e.g. local Ollama builds) still work — the
+    prompt instruction plus fence-stripping keeps output parseable."""
+    import urllib.request, urllib.error
+    url = f"{LLM_API_BASE}/chat/completions"
+    body = json.dumps({
+        "model": LLM_MODEL,
+        "temperature": 0.1,
+        "messages": [{"role": "user",
+                      "content": payload + "\n\nReturn ONLY a JSON array, no markdown fences."}],
+    }).encode()
+    req = urllib.request.Request(url, data=body, headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + LLM_API_KEY,
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            resp = json.load(r)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"HTTP {e.code}: {e.read().decode()[:200]}")
+    text = resp["choices"][0]["message"]["content"].strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0]
+    return json.loads(text)
+
+
+def call_llm(batch, tries=6):
     payload = (PROMPT.replace("{today}", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
                + json.dumps(batch, ensure_ascii=False))
     last_err = None
     for attempt in range(tries):
         try:
+            if LLM_API_BASE:
+                if not LLM_API_KEY or not LLM_MODEL:
+                    raise RuntimeError("LLM_API_BASE is set but LLM_API_KEY/LLM_MODEL is missing")
+                return call_openai_compat(payload)
             if GEMINI_API_KEY:
                 return call_gemini_rest(payload)
             p = subprocess.run([sys.executable, GEMINI, "--json", "--temperature", "0.1"],
@@ -90,7 +128,7 @@ def call_gemini(batch, tries=6):
         except Exception as e:
             last_err = f"{type(e).__name__}: {e}"
             if "HTTP 400" in last_err:
-                raise RuntimeError("gemini failed: " + last_err)
+                raise RuntimeError("llm failed: " + last_err)
             wait = min(2 ** attempt * 5, 120)
             print(f"    transport error, waiting {wait}s (attempt {attempt+1})...", flush=True)
             import time; time.sleep(wait)
@@ -108,8 +146,8 @@ def call_gemini(batch, tries=6):
             print(f"    rate-limited, waiting {wait}s (attempt {attempt+1})...", flush=True)
             import time; time.sleep(wait)
             continue
-        raise RuntimeError("gemini failed: " + last_err)
-    raise RuntimeError(f"gemini failed after {tries} tries: " + (last_err or ""))
+        raise RuntimeError("llm failed: " + last_err)
+    raise RuntimeError(f"llm failed after {tries} tries: " + (last_err or ""))
 
 def main():
     msgs_path = f"{DATA}/messages.jsonl"
@@ -160,7 +198,7 @@ def main():
                 json.dump(results, f, indent=1, ensure_ascii=False)
             continue
         try:
-            res = call_gemini(chunk)
+            res = call_llm(chunk)
             assert len(res) == len(chunk), f"count mismatch: {len(res)} vs {len(chunk)}"
         except Exception as e:
             results.append({"id": chunk[0]["id"], "no_trade": True, "trades": [],

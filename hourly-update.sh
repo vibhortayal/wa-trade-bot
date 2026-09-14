@@ -1,10 +1,10 @@
 #!/bin/bash
 # Hourly WhatsApp trade dashboard refresh.
-# Self-gates to 06:00-22:00 PT (no overnight runs).
+# Self-gates to 06:00-18:00 PT (no overnight runs).
 set -u
 HOUR=$(TZ=America/Los_Angeles date +%H)
-if [ "$HOUR" -lt 6 ] || [ "$HOUR" -ge 22 ]; then
-  echo "$(date -u +%FT%TZ) skipped: outside 06-22 PT window"
+if [ "$HOUR" -lt 6 ] || [ "$HOUR" -ge 18 ]; then
+  echo "$(date -u +%FT%TZ) skipped: outside 06-18 PT window"
   exit 0
 fi
 # On this Hatch VM, Chromium ignores env proxies, so the reader requires the
@@ -18,6 +18,9 @@ mkdir -p ~/workspace/wa-trade-reader/logs
   cd ~/workspace/wa-trade-reader || exit 1
   node read.js "your group name" --limit 200 2>&1 | tail -3 || { echo "READ FAILED"; exit 1; }
   python3 parse-trades.py 2>&1 | tail -3 || { echo "PARSE FAILED"; exit 1; }
+  # Outcome scoring is non-fatal: a TradingView failure must not block
+  # fresh parsed trades from reaching the dashboard.
+  python3 score-outcomes.py 2>&1 | tail -2 || { echo "SCORE FAILED (non-fatal, continuing)"; }
   python3 build-dashboard.py 2>&1 | tail -2 || { echo "BUILD FAILED"; exit 1; }
   cd ~/workspace/wa-trade-dashboard || exit 1
   npx -y vercel --prod --yes 2>&1 | tail -3

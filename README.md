@@ -21,9 +21,10 @@ WhatsApp group ──► read.js ──► parse-trades.py ──► score-outco
 
 1. **Pull** — `read.js` opens WhatsApp Web as a linked device, fetches messages
    since the last checkpoint, and appends them to `data/messages.jsonl`.
-2. **Parse** — `parse-trades.py` sends new messages to Gemini, which extracts
+2. **Parse** — `parse-trades.py` sends new messages to an LLM, which extracts
    structured trade actions: symbol, instrument (stock/call/put/spread),
    action (BUY/ADD/SELL/TRIM/EXIT/PLAN/HOLD/WATCH), and any stated targets.
+   Gemini (free tier) is the suggested default; any OpenAI-compatible API works.
 3. **Score** — `score-outcomes.py` pulls daily bars from TradingView and grades
    every action over the next 5 trading days (±1% noise band), detects FIFO
    round trips per trader/symbol, and checks whether planned targets were hit.
@@ -51,10 +52,27 @@ from the setup UI.
 - **Self-hosted** — runs on a free Oracle Cloud ARM VM; your keys stay in a
   `0600` `.env` on your box.
 
+## Swapping providers
+
+The suggested stack is all free-tier, but nothing is locked in — each layer
+has a clean seam:
+
+| Layer | Suggested (free) | Swappable with |
+|---|---|---|
+| Host | Oracle Cloud Always Free | Any Ubuntu VM (Hetzner, EC2, Raspberry Pi…) — `install.sh` only needs node 20, Python 3, Chromium, systemd |
+| Trade parsing (LLM) | Gemini API (free tier) | Any OpenAI-compatible chat-completions API: set `LLM_API_BASE` + `LLM_API_KEY` + `LLM_MODEL` in the setup UI (under *Use a different LLM instead*) or `.env`. Works with OpenAI, OpenRouter, Together, Ollama, vLLM, LM Studio… |
+| Data layer | Supabase (free tier) | Anything exposing PostgREST — the push script and dashboard speak plain PostgREST over REST, no SDK. Point `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` at your endpoint |
+| Market data | TradingView (your account) | Currently the one hard coupling: `score-outcomes.py` uses the vendored TradingView client. Any OHLCV source could be slotted in here — PRs welcome |
+
+Provider priority for parsing: `LLM_API_BASE` (OpenAI-compatible) →
+`GEMINI_API_KEY` (Gemini native) → Hatch `google-gemini` skill CLI (dev only).
+
 ## Quickstart
 
 You need: an Ubuntu VM (Oracle Cloud Always Free works — 4 ARM cores, 24 GB
-RAM, $0), a Gemini API key (free tier), and a Supabase project (free tier).
+RAM, $0), an LLM key (Gemini's free tier is the suggested default; any
+OpenAI-compatible API works), and a database (Supabase's free tier is the
+suggested default; any PostgREST endpoint works).
 
 ```bash
 # 1. Copy the repo to your VM (or clone the repo)
@@ -69,7 +87,8 @@ Then open **`http://<vm-ip>:3001/setup.html`** and:
 
 1. **Link WhatsApp** — enter your phone number, get the pairing code, type it
    into WhatsApp → Settings → Linked devices → *Link with phone number instead*.
-2. **Save your keys** — Gemini API key, Supabase URL + service key. Set the
+2. **Save your keys** — an LLM key (Gemini free tier suggested, or any
+   OpenAI-compatible API) and your database URL + service key. Set the
    **WhatsApp group to watch** here too (it shows the current value, and every
    field can be edited or reset from the UI).
 3. **Connect TradingView** — one-click OAuth so outcome scoring can pull bars.
@@ -150,9 +169,9 @@ Setup-UI API (all behind HTTP Basic Auth, any username):
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/status` | Pairing state, Gemini/Supabase/TV flags |
+| `GET /api/status` | Pairing state, LLM/DB/TV flags |
 | `POST /api/pair` | Start phone-code pairing (`{phone, force}`) |
-| `POST /api/keys` | Save Gemini/Supabase keys |
+| `POST /api/keys` | Save LLM/DB keys + group query (supports `reset` list) |
 | `POST /api/run` | Run a full cycle now (bypasses the time gate) |
 | `POST /api/tv-auth-start` / `POST /api/tv-auth-callback` | TradingView OAuth |
 | `GET /api/logs` | Tail of `logs/cycle.log` |

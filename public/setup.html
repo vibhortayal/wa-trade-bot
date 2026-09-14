@@ -61,8 +61,18 @@
 
 <section>
   <h2>2 · API keys &amp; group</h2>
-  <div class="fld-head"><label for="gemini_key" style="margin:0">Gemini API key (for parsing trades)</label><span><span class="fld-state" id="st_gemini_key"></span> <a href="#" class="fld-reset" onclick="return resetField('GEMINI_API_KEY','Gemini API key')">reset</a></span></div>
+  <div class="fld-head"><label for="gemini_key" style="margin:0">Gemini API key (for parsing trades) <span class="hint" style="display:inline">— suggested free default</span></label><span><span class="fld-state" id="st_gemini_key"></span> <a href="#" class="fld-reset" onclick="return resetField('GEMINI_API_KEY','Gemini API key')">reset</a></span></div>
   <input id="gemini_key" type="password" placeholder="AIza…" autocomplete="off">
+  <details style="margin-top:6px">
+    <summary class="hint" style="cursor:pointer">Use a different LLM instead (any OpenAI-compatible API)</summary>
+    <div class="fld-head"><label for="llm_api_base" style="margin:8px 0 0">LLM API base URL</label><span><span class="fld-state" id="st_llm_api_base"></span> <a href="#" class="fld-reset" onclick="return resetField('LLM_API_BASE','LLM API base URL')">reset</a></span></div>
+    <input id="llm_api_base" type="text" placeholder="https://api.openai.com/v1" autocomplete="off">
+    <div class="fld-head"><label for="llm_api_key" style="margin:8px 0 0">LLM API key</label><span><span class="fld-state" id="st_llm_api_key"></span> <a href="#" class="fld-reset" onclick="return resetField('LLM_API_KEY','LLM API key')">reset</a></span></div>
+    <input id="llm_api_key" type="password" placeholder="sk-…" autocomplete="off">
+    <div class="fld-head"><label for="llm_model" style="margin:8px 0 0">LLM model</label><span><span class="fld-state" id="st_llm_model"></span> <a href="#" class="fld-reset" onclick="return resetField('LLM_MODEL','LLM model')">reset</a></span></div>
+    <input id="llm_model" type="text" placeholder="gpt-4o-mini" autocomplete="off">
+    <p class="hint">Works with OpenAI, OpenRouter, Together, Ollama, vLLM, LM Studio… Takes precedence over the Gemini key when set.</p>
+  </details>
   <div class="fld-head"><label for="supabase_url" style="margin:8px 0 0">Supabase project URL</label><span><span class="fld-state" id="st_supabase_url"></span> <a href="#" class="fld-reset" onclick="return resetField('SUPABASE_URL','Supabase URL')">reset</a></span></div>
   <input id="supabase_url" type="text" placeholder="https://xyz.supabase.co" autocomplete="off">
   <div class="fld-head"><label for="supabase_service_key" style="margin:8px 0 0">Supabase service_role key</label><span><span class="fld-state" id="st_supabase_service_key"></span> <a href="#" class="fld-reset" onclick="return resetField('SUPABASE_SERVICE_KEY','Supabase service key')">reset</a></span></div>
@@ -176,7 +186,7 @@ async function refreshStatus() {
       (s.pairing === 'starting' ? row('Pairing', '<span class="warn">● starting secure browser…</span>') : '') +
       (s.pairing === 'waiting' ? row('Pairing', '<span class="warn">● waiting for code…</span>') : '') +
       (s.pairing_error ? row('Pairing error', '<span class="no">' + esc(s.pairing_error) + '</span>') : '') +
-      row('Gemini key', pill(s.gemini_configured)) +
+      row('LLM for parsing', pill(s.llm_configured)) +
       row('Supabase', pill(s.supabase_configured)) +
       row('TradingView', pill(s.tv_connected)) +
       row('Messages pulled', s.parsed_messages ?? 0) +
@@ -264,6 +274,9 @@ async function pollPairing() {
 async function saveKeys() {
   const body = {
     gemini_key: document.getElementById('gemini_key').value.trim(),
+    llm_api_base: document.getElementById('llm_api_base').value.trim(),
+    llm_api_key: document.getElementById('llm_api_key').value.trim(),
+    llm_model: document.getElementById('llm_model').value.trim(),
     supabase_url: document.getElementById('supabase_url').value.trim(),
     supabase_service_key: document.getElementById('supabase_service_key').value.trim(),
     group_query: document.getElementById('group_query').value.trim(),
@@ -277,6 +290,9 @@ async function saveKeys() {
     if ((r.cleared || []).length) parts.push('cleared: ' + r.cleared.join(', '));
     out.innerHTML = '<span class="ok">' + esc(parts.join(' · ') || 'nothing changed') + '</span>';
     document.getElementById('gemini_key').value = '';
+    document.getElementById('llm_api_key').value = '';
+    document.getElementById('llm_api_base').value = '';
+    document.getElementById('llm_model').value = '';
     document.getElementById('supabase_service_key').value = '';
     document.getElementById('group_query').value = '';
   } catch (e) { out.innerHTML = '<span class="no">Error: ' + esc(e.message) + '</span>'; }
@@ -300,6 +316,9 @@ async function refreshConfig() {
     }
   };
   setState('st_gemini_key', c.gemini_key);
+  setState('st_llm_api_base', c.llm_api_base, true);
+  setState('st_llm_api_key', c.llm_api_key);
+  setState('st_llm_model', c.llm_model, true);
   setState('st_supabase_url', c.supabase_url, true);
   setState('st_supabase_service_key', c.supabase_service_key);
   setState('st_group_query', c.group_query, true);

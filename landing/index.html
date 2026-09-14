@@ -478,6 +478,7 @@
         <div class="feature-head">
           <span class="section-num">04 / STACK</span>
           <h2>Boring tools, composed well.</h2>
+          <p class="feature-sub">Each layer is swappable — the stack below is the free-tier default, not a requirement. Any Ubuntu VM, any OpenAI-compatible LLM, any PostgREST database works.</p>
         </div>
         <div class="feature-list">
           <article class="feature-row">
@@ -486,7 +487,7 @@
           </article>
           <article class="feature-row">
             <span class="n">02</span><h3>Gemini API</h3>
-            <div><p>Turns messy chat messages into structured trade records — symbol, action, instrument, strike, expiry, quoted context included.</p></div>
+            <div><p>Turns messy chat messages into structured trade records — symbol, action, instrument, strike, expiry, quoted context included. Suggested free default; any OpenAI-compatible LLM (OpenAI, OpenRouter, Ollama…) can be used instead.</p></div>
           </article>
           <article class="feature-row">
             <span class="n">03</span><h3>TradingView</h3>
@@ -494,7 +495,7 @@
           </article>
           <article class="feature-row">
             <span class="n">04</span><h3>Supabase</h3>
-            <div><p>Postgres stores the pseudonymized trade records and sync metadata. The dashboard reads it live; row-level security keeps writes server-side.</p></div>
+            <div><p>Postgres stores the pseudonymized trade records and sync metadata. The dashboard reads it live; row-level security keeps writes server-side. Suggested free default — any PostgREST-compatible database works.</p></div>
           </article>
           <article class="feature-row">
             <span class="n">05</span><h3>Node.js + Python</h3>
@@ -502,7 +503,7 @@
           </article>
           <article class="feature-row">
             <span class="n">06</span><h3>Vercel + Oracle Cloud</h3>
-            <div><p>The dashboard is a dependency-free static site on Vercel; the pipeline runs on an Oracle Cloud Always Free VM — the whole thing costs nothing to operate.</p></div>
+            <div><p>The dashboard is a dependency-free static site on Vercel; the pipeline runs on an Oracle Cloud Always Free VM — the whole thing costs nothing to operate. Any Ubuntu VM works as the host.</p></div>
           </article>
         </div>
       </div>
@@ -518,7 +519,7 @@
         <div class="feature-list">
           <article class="feature-row">
             <span class="n">01</span><h3>Oracle Cloud account</h3>
-            <div><p>Always Free tier. One VM: Ubuntu 24.04, Ampere A1 shape (4 OCPUs / 24 GB RAM), public subnet with TCP ingress on port 3001. Free capacity comes and goes — retry provisioning if it fails.</p></div>
+            <div><p>Always Free tier, suggested default — any Ubuntu VM works. One VM: Ubuntu 24.04, Ampere A1 shape (4 OCPUs / 24 GB RAM), public subnet with TCP ingress on port 3001. Free capacity comes and goes — retry provisioning if it fails.</p></div>
           </article>
           <article class="feature-row">
             <span class="n">02</span><h3>WhatsApp on your phone</h3>
@@ -526,11 +527,11 @@
           </article>
           <article class="feature-row">
             <span class="n">03</span><h3>Gemini API key</h3>
-            <div><p>Free tier from Google AI Studio. Used only to turn chat messages into structured trade records.</p></div>
+            <div><p>Free tier from Google AI Studio. Suggested default — any OpenAI-compatible LLM works instead (the setup UI has fields for base URL, key, and model). Used only to turn chat messages into structured trade records.</p></div>
           </article>
           <article class="feature-row">
             <span class="n">04</span><h3>Supabase project</h3>
-            <div><p>Free tier. You need the project URL and the service_role key — writes stay on your VM while the dashboard reads with the anon key. The schema ships in the repo and inside the setup UI.</p></div>
+            <div><p>Free tier, suggested default — any PostgREST-compatible database works. You need the project URL and the service_role key — writes stay on your VM while the dashboard reads with the anon key. The schema ships in the repo and inside the setup UI.</p></div>
           </article>
           <article class="feature-row">
             <span class="n">05</span><h3>TradingView account</h3>
@@ -543,14 +544,14 @@
         </div>
         <div class="terminal prompt-scroll" aria-label="Setup prompt"><div class="terminal-bar"><i></i><i></i><i></i></div><span id="setupPrompt">Set up Trade Flow end to end: https://github.com/vibhortayal/wa-trade-bot
 
-WHAT IT IS: an hourly pipeline on a VM. A WhatsApp linked-device reader pulls new messages from one trading group, Gemini extracts structured trade actions, TradingView market data scores each outcome over five trading days, and pseudonymized records land in Supabase for a static dashboard.
+WHAT IT IS: an hourly pipeline on a VM. A WhatsApp linked-device reader pulls new messages from one trading group, an LLM (Gemini by default, any OpenAI-compatible API works) extracts structured trade actions, TradingView market data scores each outcome over five trading days, and pseudonymized records land in Postgres (Supabase by default, any PostgREST endpoint works) for a static dashboard.
 
 PREREQUISITES — I have all of these ready:
-- Oracle Cloud Always Free account
+- Oracle Cloud Always Free account (any Ubuntu VM works; Oracle is the free suggestion)
 - Ubuntu 24.04 ARM VM (Ampere A1: 4 OCPUs / 24 GB RAM) with a public IP; subnet security list allows TCP ingress on port 3001 from 0.0.0.0/0
 - My WhatsApp account on my phone (I can type in a pairing code)
-- Gemini API key (free tier)
-- Supabase project URL + service_role key
+- Gemini API key (free tier; or any OpenAI-compatible LLM base URL + key + model)
+- Supabase project URL + service_role key (or any PostgREST endpoint)
 - TradingView account (for outcome scoring)
 
 DO THIS IN ORDER. Verify each step before moving on.

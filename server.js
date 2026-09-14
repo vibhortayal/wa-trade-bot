@@ -154,7 +154,7 @@ async function getStatus() {
     parsed_messages: trades.length,
     parsed_actions: actions,
     last_parse: fs.existsSync(tradesPath) ? fs.statSync(tradesPath).mtime.toISOString() : null,
-    gemini_configured: !!(process.env.GEMINI_API_KEY),
+    llm_configured: !!(process.env.LLM_API_BASE || process.env.GEMINI_API_KEY),
     supabase_configured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
     tv_connected: await tvConnected(),
     log_tail: tailFile(path.join(ROOT, 'logs', 'cycle.log')),
@@ -342,6 +342,9 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const map = {
         gemini_key: 'GEMINI_API_KEY',
+        llm_api_base: 'LLM_API_BASE',
+        llm_api_key: 'LLM_API_KEY',
+        llm_model: 'LLM_MODEL',
         supabase_url: 'SUPABASE_URL',
         supabase_service_key: 'SUPABASE_SERVICE_KEY',
         group_query: 'WA_GROUP_QUERY',
@@ -377,6 +380,9 @@ const server = http.createServer(async (req, res) => {
       const hint = (v) => v ? '••••' + String(v).slice(-4) : '';
       return send(res, 200, {
         gemini_key: { set: !!env.GEMINI_API_KEY, hint: hint(env.GEMINI_API_KEY) },
+        llm_api_base: { set: !!env.LLM_API_BASE, value: env.LLM_API_BASE || '' },
+        llm_api_key: { set: !!env.LLM_API_KEY, hint: hint(env.LLM_API_KEY) },
+        llm_model: { set: !!env.LLM_MODEL, value: env.LLM_MODEL || '' },
         supabase_url: { set: !!env.SUPABASE_URL, value: env.SUPABASE_URL || '' },
         supabase_service_key: { set: !!env.SUPABASE_SERVICE_KEY, hint: hint(env.SUPABASE_SERVICE_KEY) },
         group_query: { set: !!env.WA_GROUP_QUERY, value: env.WA_GROUP_QUERY || '' },
