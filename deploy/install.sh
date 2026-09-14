@@ -21,7 +21,14 @@ if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split("."
   sudo apt-get install -y -qq nodejs
 fi
 
-echo "==> chromium dependencies (for whatsapp-web.js)"
+echo "==> chromium (snap; whatsapp-web.js needs a real browser on ARM64)"
+if ! snap list chromium >/dev/null 2>&1; then
+  sudo snap install chromium
+fi
+# NOTE: PUPPETEER_EXECUTABLE_PATH must point at the real binary, NOT
+# /snap/bin/chromium — snap's launcher refuses to run from inside a systemd
+# service ("not a snap cgroup"), which breaks both pairing and the hourly pull.
+CHROME_BIN=/snap/chromium/current/usr/lib/chromium-browser/chrome
 sudo apt-get install -y -qq libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
   libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
   libgbm1 libasound2t64 libpango-1.0-0 libcairo2 libx11-xcb1
@@ -48,6 +55,10 @@ s = re.sub(r"^ADMIN_PASSWORD=.*$", "ADMIN_PASSWORD=" + pw, s, flags=re.M)
 open(p, "w").write(s)
 EOF
   chmod 600 .env
+fi
+# Make sure the browser path is set even if .env predates it (see note above).
+if ! grep -q '^PUPPETEER_EXECUTABLE_PATH=' .env; then
+  printf 'PUPPETEER_EXECUTABLE_PATH=%s\n' "$CHROME_BIN" >> .env
 fi
 
 echo "==> systemd units"

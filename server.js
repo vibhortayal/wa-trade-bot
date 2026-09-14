@@ -183,7 +183,7 @@ async function startPairing(phone, force) {
     authStrategy: new LocalAuth({ dataPath: path.join(ROOT, '.wwebjs_auth') }),
     puppeteer: {
       headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/snap/bin/chromium',
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/snap/chromium/current/usr/lib/chromium-browser/chrome',
       args,
     },
   });
