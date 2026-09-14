@@ -1,7 +1,28 @@
 #!/usr/bin/env python3
 """Extract structured trades from WhatsApp messages via Gemini."""
-import json, subprocess, sys, os
+import json, re, subprocess, sys, os
 from datetime import datetime, timezone
+
+# Pre-filter: skip messages with no trade signals before spending a Gemini call.
+# Biased hard toward recall (100% on a 200-message calibration set) — a false
+# pass just costs one Gemini call, a false negative loses a trade forever.
+TRADE_HINT = re.compile(r'''(?ix)
+    \$[A-Za-z]{1,6}\b
+  | \$\d[\d,\.]*
+  | \b\d+[cCpP]\b
+  | \b\d{1,2}/\d{1,2}\b
+  | \b(calls?|puts?|leaps?|shares?|contracts?|options?|futures?|spreads?|straddles?|strangles?|iron\s?condors?|trade|trading|traded)\b
+  | \b(bought|buy|buying|sold|sells?|selling|long|short|shorted|trim\w*|added|adding|holding|hold|exit|exited|entered|entry|entries|stop|stops|target|targets|roll|rolled|assigned|exercised|swing|scalps?)\b
+  | \b(OTM|ITM|ATM)\b
+  | \bout\ of\b
+''')
+
+def looks_like_trade(item):
+    t = item.get("text") or ""
+    q = item.get("quoted") or {}
+    if q.get("text"):
+        t += " " + q["text"]
+    return bool(TRADE_HINT.search(t))
 
 GEMINI = os.path.expanduser("~/workspace/skills/google-gemini/bin/gemini.py")
 # Repo-local data dir (works wherever the repo is cloned, not just the Hatch VM).
@@ -122,12 +143,22 @@ def main():
         except Exception:
             pass
     import time
+    n_skipped = 0
     for i in range(0, len(batch_msgs), B):
         chunk = batch_msgs[i:i+B]
         if chunk[0]["id"] in done_ids:
             continue
         if (i // B) % 20 == 0:
             print(f"  {i+1}/{len(batch_msgs)}...", flush=True)
+        if not looks_like_trade(chunk[0]):
+            # No trade signals — skip the Gemini call entirely.
+            results.append({"id": chunk[0]["id"], "no_trade": True, "trades": [],
+                            "note": "prefilter: no trade signals, Gemini call skipped"})
+            done_ids.add(chunk[0]["id"])
+            n_skipped += 1
+            with open(ckpt_path, "w") as f:
+                json.dump(results, f, indent=1, ensure_ascii=False)
+            continue
         try:
             res = call_gemini(chunk)
             assert len(res) == len(chunk), f"count mismatch: {len(res)} vs {len(chunk)}"
@@ -151,7 +182,8 @@ def main():
         json.dump(results, f, indent=1, ensure_ascii=False)
     n_trades = sum(len(r.get("trades", [])) for r in results)
     n_msgs = sum(1 for r in results if r.get("trades"))
-    print(f"DONE: {n_trades} trade actions in {n_msgs} messages -> {DATA}/trades.json")
+    print(f"DONE: {n_trades} trade actions in {n_msgs} messages "
+          f"({n_skipped} skipped by prefilter) -> {DATA}/trades.json")
 
 if __name__ == "__main__":
     main()
