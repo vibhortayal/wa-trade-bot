@@ -157,6 +157,7 @@ async function getStatus() {
     llm_configured: !!(process.env.LLM_API_BASE || process.env.GEMINI_API_KEY),
     supabase_configured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
     tv_connected: await tvConnected(),
+    market_data_provider: process.env.MARKET_DATA_PROVIDER || 'tradingview',
     log_tail: tailFile(path.join(ROOT, 'logs', 'cycle.log')),
   };
 }
@@ -348,6 +349,7 @@ const server = http.createServer(async (req, res) => {
         supabase_url: 'SUPABASE_URL',
         supabase_service_key: 'SUPABASE_SERVICE_KEY',
         group_query: 'WA_GROUP_QUERY',
+        market_data_provider: 'MARKET_DATA_PROVIDER',
       };
       const envPath = path.join(ROOT, '.env');
       let lines = [];
@@ -386,6 +388,8 @@ const server = http.createServer(async (req, res) => {
         supabase_url: { set: !!env.SUPABASE_URL, value: env.SUPABASE_URL || '' },
         supabase_service_key: { set: !!env.SUPABASE_SERVICE_KEY, hint: hint(env.SUPABASE_SERVICE_KEY) },
         group_query: { set: !!env.WA_GROUP_QUERY, value: env.WA_GROUP_QUERY || '' },
+        market_data_provider: { set: !!env.MARKET_DATA_PROVIDER,
+                                value: env.MARKET_DATA_PROVIDER || 'tradingview' },
       });
     }
 

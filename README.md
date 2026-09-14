@@ -25,7 +25,7 @@ WhatsApp group ──► read.js ──► parse-trades.py ──► score-outco
    structured trade actions: symbol, instrument (stock/call/put/spread),
    action (BUY/ADD/SELL/TRIM/EXIT/PLAN/HOLD/WATCH), and any stated targets.
    Gemini (free tier) is the suggested default; any OpenAI-compatible API works.
-3. **Score** — `score-outcomes.py` pulls daily bars from TradingView and grades
+3. **Score** — `score-outcomes.py` pulls daily bars from your market-data source (TradingView by default, Yahoo Finance works too) and grades
    every action over the next 5 trading days (±1% noise band), detects FIFO
    round trips per trader/symbol, and checks whether planned targets were hit.
 4. **Push** — `push-supabase.py` upserts the anonymized actions to Supabase.
@@ -41,7 +41,7 @@ from the setup UI.
   code; no chat export, no bots added to the group.
 - **AI trade extraction** — Gemini turns messy chat messages (including quoted
   replies for context) into structured, auditable trade records.
-- **Honest outcome scoring** — every action graded against real TradingView
+- **Honest outcome scoring** — every action graded against real market data
   bars: favorable / unfavorable / flat, FIFO round trips, target-hit tracking.
 - **Per-trader leaderboards** — activity, win rate, favorite symbols, and
   instrument mix per anonymous member, with small-sample caveats.
@@ -62,7 +62,7 @@ has a clean seam:
 | Host | Oracle Cloud Always Free | Any Ubuntu VM (Hetzner, EC2, Raspberry Pi…) — `install.sh` only needs node 20, Python 3, Chromium, systemd |
 | Trade parsing (LLM) | Gemini API (free tier) | Any OpenAI-compatible chat-completions API: set `LLM_API_BASE` + `LLM_API_KEY` + `LLM_MODEL` in the setup UI (under *Use a different LLM instead*) or `.env`. Works with OpenAI, OpenRouter, Together, Ollama, vLLM, LM Studio… |
 | Data layer | Supabase (free tier) | Anything exposing PostgREST — the push script and dashboard speak plain PostgREST over REST, no SDK. Point `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` at your endpoint |
-| Market data | TradingView (your account) | Currently the one hard coupling: `score-outcomes.py` uses the vendored TradingView client. Any OHLCV source could be slotted in here — PRs welcome |
+| Market data | TradingView (your account) | Yahoo Finance — free, no key: set `MARKET_DATA_PROVIDER=yahoo` in the setup UI (§3) or `.env`. US stocks, ETFs and crypto; bars are split/dividend-adjusted. TradingView keeps broader coverage (symbol search, futures) |
 
 Provider priority for parsing: `LLM_API_BASE` (OpenAI-compatible) →
 `GEMINI_API_KEY` (Gemini native) → Hatch `google-gemini` skill CLI (dev only).
@@ -91,7 +91,7 @@ Then open **`http://<vm-ip>:3001/setup.html`** and:
    OpenAI-compatible API) and your database URL + service key. Set the
    **WhatsApp group to watch** here too (it shows the current value, and every
    field can be edited or reset from the UI).
-3. **Connect TradingView** — one-click OAuth so outcome scoring can pull bars.
+3. **Pick market data** — connect TradingView (one-click OAuth, broadest coverage) or switch to Yahoo Finance (free, no key) in §3 of the setup UI.
 4. **Run the schema** — paste `supabase/schema.sql` once in the Supabase SQL
    editor (creates `wa_trades` / `wa_meta`, anon read-only via RLS).
 5. **Run a cycle now** — pulls the last 200 messages and runs the full pipeline.
@@ -196,8 +196,9 @@ daytime PT. Use the setup UI's **Run a cycle now** button for an immediate run.
 loses the session. The link is proven by the `.wwebjs_auth/READY` marker file,
 not by session files existing.
 
-**Scoring shows 0 actions.** `score-outcomes.py` needs TradingView connected
-(via the setup UI). Scoring is non-fatal: a TV failure never blocks ingestion
+**Scoring shows 0 actions.** `score-outcomes.py` needs a market-data source:
+connect TradingView (via the setup UI) or set `MARKET_DATA_PROVIDER=yahoo`
+(free, no key). Scoring is non-fatal: a market-data failure never blocks ingestion
 or the Supabase push.
 
 ## Roadmap

@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
-"""Score trade outcomes using TradingView daily bars.
+"""Score trade outcomes using daily market-data bars.
 
 Reads parsed actions via build-dashboard.build_records(), resolves each
-symbol to a TradingView ticker (cached in data/tv_symbols.json), fetches
-daily OHLCV (cached in data/tv_bars.json), and writes per-action outcomes
-to data/outcomes.json keyed by action id (msg-<n>-<j>).
+symbol to a provider ticker (cached per provider), fetches daily OHLCV
+(cached per provider), and writes per-action outcomes to data/outcomes.json
+keyed by action id (msg-<n>-<j>).
+
+Market-data providers (MARKET_DATA_PROVIDER env, default "tradingview"):
+  - tradingview: your connected account via the vendored tv.py CLI.
+    Suggested default: symbol search + broad coverage (stocks, ETFs,
+    crypto, futures). Caches in data/tv_symbols.json / data/tv_bars.json.
+  - yahoo: free, no key, no account, via Yahoo Finance chart API.
+    US stocks/ETFs as bare tickers, crypto as BTC-USD. Caches in
+    data/yahoo_symbols.json / data/yahoo_bars.json. Bars are
+    split/dividend-adjusted. Coverage is narrower than TradingView's
+    search (no fuzzy symbol search; exotic tickers may not resolve).
 
 Outcome model (WINDOW trading days, NOISE flat band):
   - bullish opens (BUY/ADD, or instrument=call): favorable if ret > +NOISE
@@ -27,6 +37,7 @@ Unresolved symbols / missing bars -> scored:false with a reason. Nothing is
 invented: no score is emitted without real bars.
 
 Env:
+  MARKET_DATA_PROVIDER  "tradingview" (default) or "stooq"
   TV_CLI  path to tv.py (default: vendor/tradingview/tv.py next to this file)
   WINDOW  trading-day window (default 5)
   NOISE   flat band, e.g. 0.01 = 1% (default 0.01)
@@ -40,6 +51,10 @@ from datetime import datetime, timedelta, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
+PROVIDER = os.environ.get("MARKET_DATA_PROVIDER", "tradingview").strip().lower()
+if PROVIDER not in ("tradingview", "yahoo"):
+    sys.exit(f"score-outcomes: unknown MARKET_DATA_PROVIDER={PROVIDER!r} "
+             f"(expected 'tradingview' or 'yahoo')")
 TV_CLI = os.environ.get("TV_CLI", os.path.join(HERE, "vendor", "tradingview", "tv.py"))
 WINDOW = int(os.environ.get("WINDOW", "5"))
 NOISE = float(os.environ.get("NOISE", "0.01"))
@@ -59,8 +74,12 @@ try:
 except Exception:
     ET = timezone.utc  # tzdata missing: fall back to UTC bucketing
 
-SYM_CACHE = os.path.join(DATA, "tv_symbols.json")
-BAR_CACHE = os.path.join(DATA, "tv_bars.json")
+# Per-provider caches: ticker namespaces differ (NASDAQ:TSLA vs TSLA),
+# so each provider gets its own symbol/bar cache files.
+SYM_CACHE = os.path.join(DATA, "tv_symbols.json" if PROVIDER == "tradingview"
+                         else "yahoo_symbols.json")
+BAR_CACHE = os.path.join(DATA, "tv_bars.json" if PROVIDER == "tradingview"
+                         else "yahoo_bars.json")
 OUT_PATH = os.path.join(DATA, "outcomes.json")
 
 PREF_EXCH = ["NASDAQ", "NYSE", "NYSEARCA", "AMEX"]
@@ -107,52 +126,147 @@ def tv_call(tool, args, timeout=90):
         return None
 
 
-def resolve_symbol(sym, cache):
-    """Map a chat symbol ('TSLA') to a TradingView ticker ('NASDAQ:TSLA')."""
-    if sym in cache:
-        return cache[sym]
-    s = sym.upper().strip()
-    tvsym = None
-    if s in CRYPTO:
-        tvsym = f"CRYPTO:{s}USD"
-    else:
-        res = tv_call("search_symbols", {"query": s})
-        cands = (res or {}).get("data", {}).get("symbols", []) if res else []
-        # Prefer an exact ticker match on a major US exchange.
-        def rank(c):
-            exch = c.get("exchange", "")
-            exact = c.get("symbol", "").split(":")[-1].upper() == s
-            return (0 if exch in PREF_EXCH else 1,
-                    0 if exact else 1,
-                    0 if c.get("type") in PREF_TYPE else 1)
-        cands = sorted(cands, key=rank)
-        if cands and rank(cands[0])[0] == 0:
-            tvsym = cands[0]["symbol"]
-    cache[sym] = tvsym  # cache misses too (as null) to avoid re-searching
-    return tvsym
-
-
-def fetch_bars(tvsym, bar_cache, min_day):
-    """Return sorted [t,o,h,l,c,v] bars for tvsym, fetching what is missing."""
-    entry = bar_cache.get(tvsym, {"bars": []})
-    bars = entry["bars"]
-    have = {b[0] for b in bars}
-    # How many daily bars to fetch: enough to cover min_day..today+margin,
-    # or a small top-up when we already have history.
-    count = 400 if not bars else 40
-    res = tv_call("get_ohlcv", {"symbol": tvsym, "interval": "1D",
+def tv_get_bars(ticker, count):
+    """Daily [t,o,h,l,c,v] bars via the vendored TradingView CLI."""
+    res = tv_call("get_ohlcv", {"symbol": ticker, "interval": "1D",
                                 "count": count})
-    new = 0
+    bars = []
     if res and isinstance(res.get("bars"), list):
         for b in res["bars"]:
             t = b.get("t")
-            if t and t not in have:
+            if t:
                 bars.append([t, b.get("o"), b.get("h"), b.get("l"),
                              b.get("c"), b.get("v")])
-                have.add(t)
-                new += 1
+    return bars
+
+
+def yahoo_get_bars(ticker, period1=None):
+    """Daily split/dividend-adjusted [t,o,h,l,c,v] bars via the Yahoo Finance
+    chart API (free, no key). Returns [] when the ticker has no data, None on
+    transport/rate-limit problems (so callers don't cache a negative answer
+    for a transient failure)."""
+    import urllib.request
+    import urllib.error
+    import urllib.parse
+    import json
+    import time
+    t = urllib.parse.quote(ticker, safe="")
+    if period1:
+        url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{t}"
+               f"?interval=1d&period1={period1}&period2={int(time.time()) + 86400}")
+    else:
+        url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{t}"
+               f"?interval=1d&range=2y")
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            d = json.load(r)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return []  # unknown ticker
+        print(f"  yahoo {ticker}: HTTP {e.code}", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"  yahoo {ticker}: {type(e).__name__}", file=sys.stderr)
+        return None
+    chart = d.get("chart") or {}
+    if chart.get("error") or not chart.get("result"):
+        return []
+    res = chart["result"][0]
+    ts = res.get("timestamp") or []
+    ind = res.get("indicators") or {}
+    q = (ind.get("quote") or [{}])[0]
+    adj = (ind.get("adjclose") or [{}])[0].get("adjclose") or []
+    opens, highs, lows = q.get("open") or [], q.get("high") or [], q.get("low") or []
+    closes, vols = q.get("close") or [], q.get("volume") or []
+    bars = []
+    for i, tstamp in enumerate(ts):
+        if i >= len(closes):
+            break
+        c = closes[i]
+        if c is None or c <= 0:
+            continue
+        o, h, l = opens[i], highs[i], lows[i]
+        if o is None or h is None or l is None:
+            continue
+        a = adj[i] if i < len(adj) and adj[i] else c
+        f = a / c  # split/dividend adjustment factor
+        v = vols[i] if i < len(vols) and vols[i] else 0
+        bars.append([tstamp, round(o * f, 4), round(h * f, 4),
+                     round(l * f, 4), round(a, 4), v])
+    return bars
+
+
+def yahoo_candidates(sym):
+    """Ticker candidates for a chat symbol on Yahoo (no search API used)."""
+    s = sym.upper().strip()
+    if s in CRYPTO:
+        return [f"{s}-USD"]
+    return [s, f"{s}-USD"]
+def resolve_symbol(sym, sym_cache, bar_cache):
+    """Map a chat symbol ('TSLA') to a provider ticker ('NASDAQ:TSLA' on
+    TradingView, 'TSLA' on Yahoo). Providers without a search API validate
+    candidates by fetching bars (which also fills the bar cache)."""
+    if sym in sym_cache:
+        return sym_cache[sym]
+    s = sym.upper().strip()
+    ticker = None
+    if PROVIDER == "tradingview":
+        if s in CRYPTO:
+            ticker = f"CRYPTO:{s}USD"
+        else:
+            res = tv_call("search_symbols", {"query": s})
+            cands = (res or {}).get("data", {}).get("symbols", []) if res else []
+            # Prefer an exact ticker match on a major US exchange.
+            def rank(c):
+                exch = c.get("exchange", "")
+                exact = c.get("symbol", "").split(":")[-1].upper() == s
+                return (0 if exch in PREF_EXCH else 1,
+                        0 if exact else 1,
+                        0 if c.get("type") in PREF_TYPE else 1)
+            cands = sorted(cands, key=rank)
+            if cands and rank(cands[0])[0] == 0:
+                ticker = cands[0]["symbol"]
+        sym_cache[sym] = ticker  # cache misses too (as null) to avoid re-searching
+    else:
+        for cand in yahoo_candidates(s):
+            bars, _ = fetch_bars(cand, bar_cache, None)
+            if bars:
+                ticker = cand
+                break
+        if ticker:
+            sym_cache[sym] = ticker
+        # No negative caching for Yahoo: an empty answer may be a transient
+        # rate-limit, and re-probing next run is cheap.
+    return ticker
+
+
+def fetch_bars(ticker, bar_cache, min_day):
+    """Return sorted [t,o,h,l,c,v] bars for ticker, fetching what is missing."""
+    entry = bar_cache.get(ticker, {"bars": []})
+    bars = entry["bars"]
+    have = {b[0] for b in bars}
+    if PROVIDER == "tradingview":
+        # Enough bars to cover min_day..today+margin, or a small top-up when
+        # we already have history.
+        fresh = tv_get_bars(ticker, 400 if not bars else 40)
+    else:
+        # Yahoo supports period1/period2 for incremental top-ups.
+        if bars:
+            fresh = yahoo_get_bars(ticker, period1=bars[-1][0] + 1)
+        else:
+            fresh = yahoo_get_bars(ticker)
+        if fresh is None:
+            fresh = []  # transient failure: keep serving the cache
+    new = 0
+    for b in fresh:
+        if b[0] not in have:
+            bars.append(b)
+            have.add(b[0])
+            new += 1
     bars.sort(key=lambda b: b[0])
-    bar_cache[tvsym] = {"bars": bars}
+    bar_cache[ticker] = {"bars": bars}
     return bars, new
 
 
@@ -173,31 +287,31 @@ def close_on_or_before(bars, day):
 
 def main():
     records = build_records()
-    print(f"score-outcomes: {len(records)} actions")
+    print(f"score-outcomes: {len(records)} actions (market data: {PROVIDER})")
     sym_cache = load_json(SYM_CACHE, {})
     bar_cache = load_json(BAR_CACHE, {})
     outcomes = load_json(OUT_PATH, {})
 
     # Group symbols needing bars.
     syms = sorted({r["symbol"] for r in records if r.get("symbol")})
-    tvsyms = {}
+    tickers = {}
     for s in syms:
-        tv = resolve_symbol(s, sym_cache)
-        tvsyms[s] = tv
-        print(f"  {s} -> {tv or 'UNRESOLVED'}")
+        t = resolve_symbol(s, sym_cache, bar_cache)
+        tickers[s] = t
+        print(f"  {s} -> {t or 'UNRESOLVED'}")
     save_json(SYM_CACHE, sym_cache)
 
     min_day = min((r["day"] for r in records if r.get("day")), default=None)
     bars_by_sym = {}
     for s in syms:
-        tv = tvsyms[s]
-        if not tv:
+        t = tickers[s]
+        if not t:
             continue
         days = [r["day"] for r in records if r.get("symbol") == s and r.get("day")]
-        bars, new = fetch_bars(tv, bar_cache, min(days) if days else None)
+        bars, new = fetch_bars(t, bar_cache, min(days) if days else None)
         bars_by_sym[s] = bars
         if new:
-            print(f"  {tv}: +{new} bars ({len(bars)} cached)")
+            print(f"  {t}: +{new} bars ({len(bars)} cached)")
     save_json(BAR_CACHE, bar_cache)
 
     stats = {"scored": 0, "favorable": 0, "unfavorable": 0, "flat": 0,

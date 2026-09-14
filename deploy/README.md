@@ -71,9 +71,12 @@ automatically once rows land in Supabase (set the anon key in
 ## Outcome scoring
 
 Each hourly cycle runs `score-outcomes.py` after parsing. It resolves every
-traded symbol to a TradingView ticker (cached in `data/tv_symbols.json`),
-fetches daily OHLCV bars (cached in `data/tv_bars.json`), and writes
-`data/outcomes.json` keyed by action id. Scores merge into the Supabase rows
+traded symbol to a market-data ticker (cached per provider in
+`data/tv_symbols.json` or `data/yahoo_symbols.json`), fetches daily OHLCV
+bars (cached per provider), and writes `data/outcomes.json` keyed by action
+id. `MARKET_DATA_PROVIDER` picks the source: `tradingview` (default, your
+connected account — broadest coverage) or `yahoo` (free, no key — US stocks,
+ETFs and crypto). Scores merge into the Supabase rows
 via the `outcome` JSONB column:
 
 - **direction** — bullish opens (BUY/ADD/call): favorable if the underlying
