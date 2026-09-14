@@ -1,4 +1,4 @@
-/* Trade Flow dashboard — vanilla JS, hand-rolled SVG */
+/* Trading Floor dashboard — vanilla JS, hand-rolled SVG */
 const state = { mode: "day", end: null, customStart: null, customEnd: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, showFilters: false, showPlans: false, showHeatmap: false, tab: "market", traderSort: "active" };
 let DATA = null;
 

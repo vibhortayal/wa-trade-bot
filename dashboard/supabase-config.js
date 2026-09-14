@@ -1,4 +1,4 @@
-// Trade Flow — Supabase live-data config.
+// Trading Floor — Supabase live-data config.
 // The anon key is PUBLIC by design (PostgREST + Row Level Security limits it to
 // read-only access on wa_trades / wa_meta).
 window.TRADE_FLOW = {
