@@ -187,12 +187,29 @@ async function pair() {
   try {
     const r = await api('/api/pair', { method: 'POST',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
-    if (r.already) { out.innerHTML = '<p class="ok">Already linked ✓</p>'; }
+    if (r.already) {
+      out.innerHTML = '<p class="hint">A session already exists on the server — but it may be stale. If the bot is not actually linked, start over:</p>' +
+        '<div class="row"><button class="secondary" onclick="pairFresh()">Pair again with a fresh code</button></div>';
+    }
     else {
       out.innerHTML = '<div class="code">' + esc(r.code) + '</div>' +
         '<p class="hint">Type this code into WhatsApp on your phone, then wait — this page will update when linked.</p>';
       pollPaired();
     }
+  } catch (e) { out.innerHTML = '<p class="no">Error: ' + esc(e.message) + '</p>'; }
+  refreshStatus();
+}
+async function pairFresh() {
+  const phone = document.getElementById('phone').value.trim();
+  const out = document.getElementById('pairOut');
+  if (!phone) { out.innerHTML = '<p class="no">Enter your phone number first.</p>'; return; }
+  out.innerHTML = '<p class="hint">Wiping the old session and requesting a fresh code…</p>';
+  try {
+    const r = await api('/api/pair', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, force: true }) });
+    out.innerHTML = '<div class="code">' + esc(r.code) + '</div>' +
+      '<p class="hint">Type this code into WhatsApp on your phone right away (codes expire fast), then wait — this page will update when linked.</p>';
+    pollPaired();
   } catch (e) { out.innerHTML = '<p class="no">Error: ' + esc(e.message) + '</p>'; }
   refreshStatus();
 }

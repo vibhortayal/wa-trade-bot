@@ -121,7 +121,14 @@ async function getStatus() {
 
 // ---- WhatsApp pairing (one-time). Keeps the client alive until the user
 // types the code on their phone; 'ready' then flushes the session to disk. ----
-async function startPairing(phone) {
+async function startPairing(phone, force) {
+  if (force) {
+    // User asked for a fresh code: kill any in-progress pairing client and
+    // wipe the (possibly stale) session so we start clean.
+    if (pairing.client) { try { await pairing.client.destroy(); } catch {} pairing.client = null; }
+    fs.rmSync(path.join(ROOT, '.wwebjs_auth'), { recursive: true, force: true });
+    pairing.state = 'idle'; pairing.code = null; pairing.error = null;
+  }
   if (sessionExists()) { pairing.state = 'paired'; return { already: true }; }
   if (pairing.state === 'waiting') return { code: pairing.code };
   const { Client, LocalAuth } = require('whatsapp-web.js');
@@ -134,7 +141,8 @@ async function startPairing(phone) {
     authStrategy: new LocalAuth({ dataPath: path.join(ROOT, '.wwebjs_auth') }),
     puppeteer: { headless: true, args },
   });
-  const cleanup = async () => { try { await client.destroy(); } catch {} };
+  pairing.client = client;
+  const cleanup = async () => { try { await client.destroy(); } catch {} pairing.client = null; };
   client.on('auth_failure', async (m) => {
     pairing.state = 'failed'; pairing.error = String(m);
     await cleanup();
@@ -229,7 +237,7 @@ const server = http.createServer(async (req, res) => {
       const phone = String(body.phone || '').replace(/\D/g, '');
       if (!/^\d{7,15}$/.test(phone)) return send(res, 400, { error: 'phone must be 7-15 digits with country code' });
       try {
-        const r = await startPairing(phone);
+        const r = await startPairing(phone, body.force === true);
         return send(res, 200, r);
       } catch (e) {
         pairing.state = 'failed'; pairing.error = e.message;
