@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trade Flow — Bot Setup</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 16px;
+         background: #0f1115; color: #e8eaf0; max-width: 640px; margin-inline: auto; }
+  h1 { font-size: 1.4rem; margin: 8px 0 4px; }
+  p.sub { color: #9aa0ae; margin-top: 0; font-size: .9rem; }
+  section { background: #171a21; border: 1px solid #262b36; border-radius: 12px;
+            padding: 14px; margin: 12px 0; }
+  section h2 { font-size: 1.05rem; margin: 0 0 10px; }
+  .row { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+  input[type=text], input[type=password] { flex: 1; min-width: 0; padding: 10px;
+      border-radius: 8px; border: 1px solid #333a48; background: #0f1115; color: #e8eaf0; font-size: 1rem; }
+  button { padding: 10px 16px; border-radius: 8px; border: 0; font-size: 1rem;
+           background: #4f7cff; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; }
+  button.secondary { background: #2a3040; }
+  .stat { display: flex; justify-content: space-between; padding: 6px 0;
+          border-bottom: 1px solid #222834; font-size: .95rem; }
+  .stat:last-child { border-bottom: 0; }
+  .ok { color: #5fd68a; } .no { color: #e0685f; } .warn { color: #e0b45f; }
+  .code { font-size: 2rem; letter-spacing: .35em; text-align: center; margin: 12px 0;
+          font-weight: 700; color: #fff; }
+  pre#log { background: #0b0d11; border: 1px solid #262b36; border-radius: 8px;
+            padding: 10px; font-size: .75rem; max-height: 260px; overflow: auto;
+            white-space: pre-wrap; word-break: break-word; }
+  .hint { color: #9aa0ae; font-size: .85rem; margin: 6px 0; }
+  label { display: block; font-size: .85rem; color: #9aa0ae; margin: 8px 0 4px; }
+  a { color: #8fb0ff; }
+</style>
+</head>
+<body>
+<h1>◈ Trade Flow bot setup</h1>
+<p class="sub">Pair WhatsApp, add keys, connect TradingView, then run a cycle. <a href="/">View dashboard →</a></p>
+
+<section>
+  <h2>Status</h2>
+  <div id="status"><p class="hint">Loading…</p></div>
+  <div class="row"><button class="secondary" onclick="refreshStatus()">Refresh</button></div>
+</section>
+
+<section>
+  <h2>1 · Link WhatsApp</h2>
+  <p class="hint">Enter your phone number with country code (e.g. 15551234567). You'll get an 8-digit code to type into WhatsApp → Settings → Linked Devices → Link a Device → "Link with phone number".</p>
+  <div class="row">
+    <input id="phone" type="text" inputmode="tel" placeholder="15551234567">
+    <button onclick="pair()">Get pairing code</button>
+  </div>
+  <div id="pairOut"></div>
+</section>
+
+<section>
+  <h2>2 · API keys</h2>
+  <label>Gemini API key (for parsing trades)</label>
+  <input id="gemini_key" type="password" placeholder="AIza…" autocomplete="off">
+  <label>Supabase project URL</label>
+  <input id="supabase_url" type="text" placeholder="https://xyz.supabase.co" autocomplete="off">
+  <label>Supabase service_role key</label>
+  <input id="supabase_service_key" type="password" placeholder="eyJ…" autocomplete="off">
+  <div class="row" style="margin-top:10px">
+    <button onclick="saveKeys()">Save keys</button>
+  </div>
+  <p class="hint" id="keysOut"></p>
+  <p class="hint">After saving, run <code>supabase/schema.sql</code> once in your Supabase project's SQL editor.</p>
+</section>
+
+<section>
+  <h2>3 · Connect TradingView (outcome scoring)</h2>
+  <div class="row">
+    <button onclick="tvStart()">Connect TradingView</button>
+  </div>
+  <div id="tvOut"></div>
+  <div id="tvCb" style="display:none">
+    <p class="hint">Approve in TradingView, then paste the full callback URL you land on (it contains <code>?code=…</code>):</p>
+    <div class="row">
+      <input id="tvCallback" type="text" placeholder="https://…?code=…">
+      <button onclick="tvFinish()">Finish connecting</button>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>4 · Run a cycle</h2>
+  <p class="hint">Pulls new WhatsApp messages → parses trades with Gemini → scores with TradingView → pushes to Supabase.</p>
+  <div class="row">
+    <button onclick="runCycle()">Run a cycle now</button>
+    <button class="secondary" onclick="tailLog()">Refresh log</button>
+  </div>
+  <pre id="log">Log will appear here…</pre>
+</section>
+
+<script>
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pill = (ok) => ok ? '<span class="ok">● yes</span>' : '<span class="no">● no</span>';
+
+async function refreshStatus() {
+  try {
+    const s = await api('/api/status');
+    document.getElementById('status').innerHTML =
+      row('WhatsApp linked', pill(s.wa_paired)) +
+      (s.pairing === 'waiting' ? row('Pairing', '<span class="warn">● waiting for code…</span>') : '') +
+      (s.pairing_error ? row('Pairing error', '<span class="no">' + esc(s.pairing_error) + '</span>') : '') +
+      row('Gemini key', pill(s.gemini_configured)) +
+      row('Supabase', pill(s.supabase_configured)) +
+      row('TradingView', pill(s.tv_connected)) +
+      row('Messages pulled', s.parsed_messages ?? 0) +
+      row('Trade actions', s.parsed_actions ?? 0) +
+      row('Last pull', esc(s.last_pull || '—')) +
+      row('Last parse', esc(s.last_parse || '—'));
+  } catch (e) {
+    document.getElementById('status').innerHTML = '<p class="no">Error: ' + esc(e.message) + '</p>';
+  }
+}
+const row = (k, v) => '<div class="stat"><span>' + k + '</span><span>' + v + '</span></div>';
+
+async function pair() {
+  const phone = document.getElementById('phone').value.trim();
+  const out = document.getElementById('pairOut');
+  out.innerHTML = '<p class="hint">Requesting code…</p>';
+  try {
+    const r = await api('/api/pair', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
+    if (r.already) { out.innerHTML = '<p class="ok">Already linked ✓</p>'; }
+    else {
+      out.innerHTML = '<div class="code">' + esc(r.code) + '</div>' +
+        '<p class="hint">Type this code into WhatsApp on your phone, then wait — this page will update when linked.</p>';
+      pollPaired();
+    }
+  } catch (e) { out.innerHTML = '<p class="no">Error: ' + esc(e.message) + '</p>'; }
+  refreshStatus();
+}
+async function pollPaired() {
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    try {
+      const s = await api('/api/status');
+      if (s.wa_paired) {
+        document.getElementById('pairOut').innerHTML = '<p class="ok">✓ WhatsApp linked!</p>';
+        refreshStatus(); return;
+      }
+      if (s.pairing === 'failed') {
+        document.getElementById('pairOut').innerHTML =
+          '<p class="no">Pairing failed: ' + esc(s.pairing_error || '') + '</p>';
+        refreshStatus(); return;
+      }
+    } catch {}
+  }
+}
+
+async function saveKeys() {
+  const body = {
+    gemini_key: document.getElementById('gemini_key').value.trim(),
+    supabase_url: document.getElementById('supabase_url').value.trim(),
+    supabase_service_key: document.getElementById('supabase_service_key').value.trim(),
+  };
+  const out = document.getElementById('keysOut');
+  try {
+    const r = await api('/api/keys', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    out.innerHTML = '<span class="ok">Saved: ' + esc((r.saved || []).join(', ') || 'nothing new') + '</span>';
+    document.getElementById('gemini_key').value = '';
+    document.getElementById('supabase_service_key').value = '';
+  } catch (e) { out.innerHTML = '<span class="no">Error: ' + esc(e.message) + '</span>'; }
+  refreshStatus();
+}
+
+async function tvStart() {
+  const out = document.getElementById('tvOut');
+  out.innerHTML = '<p class="hint">Opening TradingView…</p>';
+  try {
+    const r = await api('/api/tv-auth-start', { method: 'POST' });
+    window.open(r.url, '_blank');
+    document.getElementById('tvCb').style.display = 'block';
+    out.innerHTML = '<p class="hint">Approve in the TradingView tab, then paste the callback URL below.</p>';
+  } catch (e) { out.innerHTML = '<p class="no">Error: ' + esc(e.message) + '</p>'; }
+}
+async function tvFinish() {
+  const url = document.getElementById('tvCallback').value.trim();
+  const out = document.getElementById('tvOut');
+  try {
+    const r = await api('/api/tv-auth-callback', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+    out.innerHTML = r.connected
+      ? '<p class="ok">✓ TradingView connected</p>'
+      : '<p class="warn">Callback accepted, but not showing as connected — check status.</p>';
+  } catch (e) { out.innerHTML = '<p class="no">Error: ' + esc(e.message) + '</p>'; }
+  refreshStatus();
+}
+
+async function runCycle() {
+  try {
+    await api('/api/run', { method: 'POST' });
+    document.getElementById('log').textContent = 'Cycle started… tailing log.';
+    const iv = setInterval(async () => {
+      await tailLog();
+      if (!/started|running/i.test(document.getElementById('log').textContent.slice(-200))) {}
+    }, 4000);
+    setTimeout(() => clearInterval(iv), 10 * 60 * 1000);
+  } catch (e) { document.getElementById('log').textContent = 'Error: ' + e.message; }
+}
+async function tailLog() {
+  try {
+    const r = await api('/api/logs');
+    const el = document.getElementById('log');
+    el.textContent = r.log || '(empty log)';
+    el.scrollTop = el.scrollHeight;
+  } catch (e) { document.getElementById('log').textContent = 'Error: ' + e.message; }
+}
+
+refreshStatus();
+setInterval(refreshStatus, 15000);
+</script>
+</body>
+</html>
