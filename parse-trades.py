@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Extract structured trades from WhatsApp messages via Gemini."""
+import hashlib
 import json, re, subprocess, sys, os
 from datetime import datetime, timezone
 
@@ -198,6 +199,22 @@ def call_llm(batch, tries=6):
         raise RuntimeError("llm failed: " + last_err)
     raise RuntimeError(f"llm failed after {tries} tries: " + (last_err or ""))
 
+def msg_keys(m):
+    """Identity keys for dedup. Record ids are positional (msg-<line>), so a
+    re-appended line looks new even when it's the same message. Prefer the
+    WhatsApp message id when present, but always include a content hash
+    (sender + second + body + quoted body) so id-less records still match a
+    re-pulled copy of the same message."""
+    keys = []
+    if m.get("id"):
+        keys.append("wa:" + str(m["id"]))
+    q = (m.get("quoted") or {}).get("body") or ""
+    h = hashlib.sha1("|".join([str(m.get("senderId") or ""), str(m.get("t") or ""),
+                               m.get("body") or "", q]).encode()).hexdigest()[:16]
+    keys.append("h:" + h)
+    return keys
+
+
 def _write_parse_stats(new_messages, new_actions):
     with open(f"{DATA}/parse-stats.json", "w") as f:
         json.dump({
@@ -222,6 +239,7 @@ def main():
         label, _ = pseudo(pseudos, sender_id, sender_name, from_me)
         return label
     batch_msgs = []
+    key_of = {}  # "msg-<idx>" -> identity keys of the raw message
     for idx, m in enumerate(msgs):
         if not m.get("body"):
             continue
@@ -232,6 +250,7 @@ def main():
             item["quoted"] = {"sender": trader_of(m["quoted"].get("senderId")),
                               "text": scrub_phones(m["quoted"]["body"])}
         batch_msgs.append(item)
+        key_of[item["id"]] = msg_keys(m)
     # Persist newly assigned labels BEFORE the first LLM call, so a mid-run
     # crash can't shift numbering on the retry.
     save_pseudos(pseudos)
@@ -243,6 +262,7 @@ def main():
     # tokens. Tunable via PARSE_BATCH_SIZE.
     B = max(1, int(os.environ.get("PARSE_BATCH_SIZE", "20")))
     done_ids = set()
+    done_keys = set()
     # resume from checkpoint if present
     ckpt_path = f"{DATA}/trades.json"
     n_done_before = 0
@@ -253,6 +273,14 @@ def main():
             if isinstance(prev, list) and prev and all("id" in r for r in prev):
                 results = prev
                 done_ids = {r["id"] for r in prev}
+                # identity keys of already-parsed messages, mapped back
+                # through the current message list (robust to index shifts)
+                for r in prev:
+                    mm = re.match(r"msg-(\d+)$", r.get("id", ""))
+                    if mm:
+                        i0 = int(mm.group(1))
+                        if 0 <= i0 < len(msgs):
+                            done_keys.update(msg_keys(msgs[i0]))
                 n_done_before = len(done_ids)
                 n_trades_before = sum(len(r.get("trades", [])) for r in prev)
                 print(f"  resuming: {len(done_ids)} already parsed", flush=True)
@@ -263,10 +291,18 @@ def main():
     def checkpoint():
         with open(ckpt_path, "w") as f:
             json.dump(results, f, indent=1, ensure_ascii=False)
+    def _mark_done(mid):
+        done_ids.add(mid)
+        done_keys.update(key_of.get(mid, ()))
+
     for i in range(0, len(batch_msgs), B):
         # Drop already-parsed messages individually: a chunk may straddle
         # the resume boundary, and skipping it whole would lose messages.
-        chunk = [m for m in batch_msgs[i:i+B] if m["id"] not in done_ids]
+        # A message counts as parsed by positional id OR by identity key
+        # (catches re-appended copies of a message parsed under another id).
+        chunk = [m for m in batch_msgs[i:i+B]
+                 if m["id"] not in done_ids
+                 and not any(k in done_keys for k in key_of.get(m["id"], ()))]
         if not chunk:
             continue
         if (i // B) % 20 == 0:
@@ -278,7 +314,7 @@ def main():
             if m["id"] not in to_parse_ids:
                 results.append({"id": m["id"], "no_trade": True, "trades": [],
                                 "note": "prefilter: no trade signals, Gemini call skipped"})
-                done_ids.add(m["id"])
+                _mark_done(m["id"])
                 n_skipped += 1
         if to_parse:
             try:
@@ -288,11 +324,12 @@ def main():
                 for m in to_parse:
                     results.append({"id": m["id"], "no_trade": True, "trades": [],
                                     "note": f"PARSE_FAILED: {e}"[:300]})
-                    done_ids.add(m["id"])
+                    _mark_done(m["id"])
                 print(f"    parse failed for {len(to_parse)} msgs: {e}", flush=True)
             else:
                 results.extend(res)
-                done_ids.update(r["id"] for r in res)
+                for r in res:
+                    _mark_done(r["id"])
         checkpoint()
         time.sleep(4)  # stay under free-tier RPM
     print(f"  {len(batch_msgs)}/{len(batch_msgs)} done", flush=True)

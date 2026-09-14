@@ -2,6 +2,7 @@
 // Bypasses client.getChats()/getChatModel (hits an IndexedDB DataError on this
 // WA Web build); works directly with the in-memory collections in page context.
 const { Client, LocalAuth } = require('whatsapp-web.js');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const ensureProxy = require('./ensure-proxy');
@@ -154,7 +155,7 @@ client.on('ready', async () => {
           if (c) senderName = c.pushname || c.name || c.verifiedName || senderName;
         } catch (e) { /* ignore */ }
         return {
-          id: s.id && s.id._serialized,
+          id: (s.id && s.id._serialized) || null,
           t: s.t, ts: s.t * 1000,
           fromMe: s.id && s.id.fromMe,
           authorId: s.author,
@@ -189,12 +190,35 @@ client.on('ready', async () => {
     // fresh is oldest-first (msgs was sorted ascending). Under the cap we
     // ingest the oldest ones so the checkpoint advances contiguously — the
     // remainder are genuinely deferred to the next cycle, not skipped.
-    // >= (not >): timestamps are second-resolution, so two messages can share
-    // the boundary second. Re-appended stragglers are harmless: the parser
-    // dedupes by message id and Supabase upserts on id.
-    const fresh = res.messages.filter((m) => m.t >= lastTs);
+    // Identity dedup (not just timestamp): >= on the checkpoint is needed
+    // because timestamps are second-resolution, so a re-pull can return a
+    // message already on disk. msgKeys prefers the WhatsApp message id and
+    // always includes a content hash (sender + second + body + quoted body),
+    // so id-less historical records still match a re-pulled copy. Without
+    // this, a boundary-second re-pull appends a duplicate line and the
+    // parser treats it as a new message (its ids are positional).
+    const msgKeys = (m) => {
+      const q = (m.quoted && (m.quoted.body || '')) || '';
+      const h = 'h:' + crypto.createHash('sha1')
+        .update([m.senderId || '', String(m.t || ''), m.body || '', q].join('\n'))
+        .digest('hex').slice(0, 16);
+      return m.id ? ['wa:' + m.id, h] : [h];
+    };
+    const seen = new Set();
+    try {
+      for (const line of fs.readFileSync(MSG_FILE, 'utf8').split('\n')) {
+        if (!line.trim()) continue;
+        try { for (const k of msgKeys(JSON.parse(line))) seen.add(k); }
+        catch (e) { /* ignore bad lines */ }
+      }
+    } catch (e) { /* fresh file */ }
+    const isNew = (m) => m.t >= lastTs && !msgKeys(m).some((k) => seen.has(k));
+    const fresh = res.messages.filter(isNew);
+    const reduped = res.messages.filter((m) => m.t >= lastTs && !isNew(m));
+    if (reduped.length) console.log(`[read] skipped ${reduped.length} already-ingested message(s)`);
     const capped = fresh.length > cap;
     const toIngest = fresh.slice(0, cap);
+    for (const m of toIngest) for (const k of msgKeys(m)) seen.add(k);
     if (toIngest.length) {
       fs.appendFileSync(MSG_FILE, toIngest.map((m) => JSON.stringify({ group: group.name, groupId: group.id, ...m })).join('\n') + '\n');
       state[key] = Math.max(...toIngest.map((m) => m.t));
