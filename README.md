@@ -143,6 +143,7 @@ for you; `.env.example` documents every key.
 | `WA_GROUP_QUERY` | Which group to pull (matched by name) |
 | `PUPPETEER_EXECUTABLE_PATH` | Chromium binary (see Troubleshooting) |
 | `USE_PROXY` | `1` if Chromium needs the local CONNECT forwarder |
+| `SERVE_DASHBOARD` | `0` to stop serving the dashboard from the bot (setup UI stays up); default `1` |
 
 The hourly timer runs `06:00–18:00 America/Los_Angeles`. A manual **Run a cycle
 now** from the setup UI bypasses the window (`MANUAL_RUN=1`).

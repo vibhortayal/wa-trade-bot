@@ -36,7 +36,8 @@ node read.js "your group name" --limit 3
 ```
 
 Setup UI: `http://<vm-ip>:3001/setup.html` (Basic Auth, any username + the
-admin password). Dashboard: the bot serves it at `http://<vm-ip>:3001/`;
+admin password). Dashboard: the bot serves it at `http://<vm-ip>:3001/`
+unless `SERVE_DASHBOARD=0` is set in `.env`;
 production is https://wa-trade-flow.vercel.app.
 
 ## Architecture notes (read before touching the pipeline)

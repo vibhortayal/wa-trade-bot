@@ -20,6 +20,7 @@ const { spawn, execSync } = require('child_process');
 const ROOT = __dirname;
 const PORT = parseInt(process.env.BOT_PORT || '3001', 10);
 const BIND = process.env.BOT_BIND || '127.0.0.1';
+const SERVE_DASHBOARD = process.env.SERVE_DASHBOARD !== '0'; // set 0 to serve only the setup UI
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
 if (BIND !== '127.0.0.1' && !ADMIN_PASSWORD) {
@@ -265,6 +266,9 @@ function send(res, code, obj) {
 function serveStatic(req, res) {
   let p = decodeURIComponent(req.url.split('?')[0]);
   if (p === '/') p = '/index.html';
+  if (!SERVE_DASHBOARD && ['/index.html', '/app.js', '/styles.css'].includes(p)) {
+    return send(res, 404, { error: 'dashboard disabled (SERVE_DASHBOARD=0)' });
+  }
   const file = path.normalize(path.join(ROOT, 'public', p));
   if (!file.startsWith(path.join(ROOT, 'public'))) return send(res, 403, { error: 'forbidden' });
   const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
