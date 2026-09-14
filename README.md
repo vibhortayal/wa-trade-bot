@@ -118,8 +118,8 @@ It reads live from Supabase when configured, and falls back to a baked-in
 
 ## Privacy by design
 
-- **Pseudonymous by default.** Every sender is mapped to `You` (the group
-  owner) or `Trader 01…N`. Numbers are never recycled, so a trader's history
+- **Pseudonymous by default.** Every sender is mapped to `Trader 01…N` — no
+  exceptions, no real names. Numbers are never recycled, so a trader's history
   stays consistent without ever revealing who they are.
 - **Raw messages stay home.** `data/messages.jsonl` and the pseudonym map are
   gitignored and never committed. Only anonymized, structured actions reach
