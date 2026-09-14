@@ -3,8 +3,8 @@
 
 Reads data/trades.json + data/messages.jsonl, emits
 ~/workspace/wa-trade-dashboard/data/trades.json with:
-- senders replaced by stable pseudonyms ("You" for the user's own messages,
-  "Trader 01".. for everyone else)
+- senders replaced by stable pseudonyms ("Trader 01".. for everyone,
+  including the user's own messages — no "You" label)
 - no raw message bodies, no phone numbers, no group identifiers
 
 Also importable: build_records() -> list of scrubbed action dicts (used by
@@ -44,9 +44,10 @@ def build_records():
 
     def pseudo(sender_id, sender_name, from_me):
         nonlocal changed
-        if from_me:
-            return "You"
-        key = sender_id or sender_name or "unknown"
+        # Everyone — including the user's own messages — gets a stable,
+        # anonymous "Trader NN" label. Never "You": nothing may reveal
+        # which trader is the site owner.
+        key = sender_id or sender_name or ("__me__" if from_me else "unknown")
         if key not in pseudos:
             counter[0] += 1
             pseudos[key] = f"Trader {counter[0]:02d}"

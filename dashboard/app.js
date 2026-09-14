@@ -694,11 +694,49 @@ async function init() {
   $("sheetX").onclick = closeSheet;
 $("sheetBackdrop").onclick = closeSheet;
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+// One JS-positioned tooltip for taps (touch) and hovers (desktop), clamped
+// inside the viewport so it never renders half off-screen on phones.
+const tooltipEl = document.getElementById("tooltip");
+let tipAnchor = null;
+const TIP_HOVER = matchMedia("(hover: hover)").matches;
+const TIP_SEL = ".tip, .tipx";
+function showTip(anchor) {
+  const text = anchor.getAttribute("data-tip");
+  if (!text) return;
+  tooltipEl.textContent = text;
+  tooltipEl.hidden = false;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const r = anchor.getBoundingClientRect();
+  const tw = tooltipEl.offsetWidth, th = tooltipEl.offsetHeight;
+  let left = r.left + r.width / 2 - tw / 2;
+  left = Math.max(8, Math.min(left, vw - tw - 8));
+  let top = r.top - th - 10;
+  if (top < 8) top = r.bottom + 10; // flip below when no room above
+  top = Math.max(8, Math.min(top, vh - th - 8));
+  tooltipEl.style.left = left + "px";
+  tooltipEl.style.top = top + "px";
+  tipAnchor = anchor;
+}
+function hideTip() { tooltipEl.hidden = true; tipAnchor = null; }
 document.addEventListener("click", e => {
-    const tip = e.target.closest ? e.target.closest(".tip, .tipx") : null;
-    document.querySelectorAll(".tip.show, .tipx.show").forEach(t => { if (t !== tip) t.classList.remove("show"); });
-    if (tip) tip.classList.toggle("show");
+  if (tooltipEl.contains(e.target)) { hideTip(); return; }
+  const anchor = e.target.closest ? e.target.closest(TIP_SEL) : null;
+  if (anchor && tipAnchor === anchor && !tooltipEl.hidden) hideTip();
+  else if (anchor) showTip(anchor);
+  else hideTip();
+});
+if (TIP_HOVER) {
+  document.addEventListener("mouseover", e => {
+    const a = e.target.closest ? e.target.closest(TIP_SEL) : null;
+    if (a) showTip(a);
   });
+  document.addEventListener("mouseout", e => {
+    const a = e.target.closest ? e.target.closest(TIP_SEL) : null;
+    if (a) hideTip();
+  });
+}
+window.addEventListener("scroll", hideTip, { passive: true, capture: true });
+window.addEventListener("resize", hideTip);
   $("generated").textContent = "data through " + fmtDay(DATA.day_range[1]) + (DATA.live ? " · live" : "");
   document.querySelectorAll("#rangeSeg button").forEach(b =>
     b.onclick = () => { state.mode = b.dataset.mode; clearFilters(); render(); });

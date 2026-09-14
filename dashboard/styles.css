@@ -221,10 +221,14 @@ main { max-width: 1180px; margin: 0 auto; padding: 18px 22px 40px; }
 .plan-row .pd { color: var(--muted); font-size: 11.5px; }
 
 .heatmap { display: grid; grid-template-columns: repeat(20, 1fr); gap: 4px; }
-.hm-cell { aspect-ratio: 1; border-radius: 3px; background: var(--panel-2); position: relative; }
-.hm-cell:hover::after {
-  content: attr(data-tip); position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%);
-  background: #000; color: #fff; font-size: 11px; padding: 3px 8px; border-radius: 5px; white-space: nowrap; z-index: 5;
+.hm-cell { aspect-ratio: 1; border-radius: 3px; background: var(--panel-2); cursor: pointer; position: relative; }
+/* hover preview only where hover exists — on touch, tapping a cell opens that day */
+@media (hover: hover) {
+  .hm-cell:hover::after {
+    content: attr(data-tip); position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%);
+    background: #000; color: #fff; font-size: 11px; padding: 3px 8px; border-radius: 5px; white-space: nowrap; z-index: 5;
+    max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
+  }
 }
 @media (max-width: 700px) { .heatmap { grid-template-columns: repeat(10, 1fr); } }
 
@@ -254,18 +258,17 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px
   cursor: help; margin-left: 6px; position: relative; vertical-align: 2px;
   text-transform: none; letter-spacing: 0;
 }
-.tip:hover::after, .tip.show::after,
-.tipx:hover::after, .tipx.show::after {
-  content: attr(data-tip);
-  position: absolute; bottom: 140%; left: 50%; transform: translateX(-50%);
-  background: #000; color: #fff; font-size: 12px; font-weight: 400;
-  padding: 8px 11px; border-radius: 8px; width: 230px; max-width: 70vw;
-  white-space: normal; z-index: 30; line-height: 1.45; text-align: left;
+/* Tooltips are one JS-positioned bubble (#tooltip), clamped inside the viewport.
+   (CSS-only ::after tooltips overflowed off-screen near the phone's edges.) */
+.tooltip {
+  position: fixed; z-index: 50; max-width: min(280px, calc(100vw - 24px));
+  background: #000; color: #fff; font-size: 12.5px; font-weight: 400;
+  padding: 9px 12px; border-radius: 9px; line-height: 1.5; text-align: left;
   text-transform: none; letter-spacing: 0;
+  box-shadow: 0 6px 24px rgba(0,0,0,.45);
 }
+.tooltip[hidden] { display: none; }
 /* tipx = tooltip on an element that already has its own shape (e.g. outcome
    pills). Same tap-to-show behavior as .tip, without the 16px circle chrome. */
 .tipx { position: relative; cursor: help; }
-/* in the sticky topbar the tooltip would fall off-screen above, so show it below */
-.tip-below:hover::after, .tip-below.show::after { bottom: auto; top: 150%; }
 .panel-head { flex-wrap: wrap; gap: 8px; }
