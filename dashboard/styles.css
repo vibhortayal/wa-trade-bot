@@ -293,4 +293,9 @@ footer { text-align: center; color: var(--muted); font-size: 12px; padding: 18px
 /* tipx = tooltip on an element that already has its own shape (e.g. outcome
    pills). Same tap-to-show behavior as .tip, without the 16px circle chrome. */
 .tipx { position: relative; cursor: help; }
+/* Assumed entry price: muted + italic + dotted underline so it reads as a
+   guess at a glance; tap/hover for the explanation tooltip. */
+.pchip.assumed { color: var(--muted); font-style: italic; border-bottom: 1px dotted var(--muted); }
+/* Incomplete post marker: small amber tag, tap/hover lists what's missing. */
+.incomplete { font-size: 11px; color: var(--amber); border: 1px solid var(--amber); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
 .panel-head { flex-wrap: wrap; gap: 8px; }

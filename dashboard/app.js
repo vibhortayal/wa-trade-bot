@@ -311,9 +311,51 @@ function instLabel(t) {
   else if (t.instrument === "stock") parts.push("shares");
   if (t.strike) parts.push("$" + t.strike);
   if (t.expiry) parts.push(t.expiry);
-  if (t.price) parts.push("@" + t.price);
   if (t.quantity) parts.push("× " + t.quantity);
   return parts.join(" ");
+}
+/* Assumed entry price: when the message stated no price, scoring already fell
+   back to the day's close (outcome.entry_src === "close"). For stock/crypto
+   we surface that close, explicitly labeled as an assumption. Options are
+   excluded on purpose — the close is the underlying, not the contract
+   premium, so showing it as the price would be wrong. */
+function assumedPrice(t) {
+  const o = t.outcome || {};
+  const instr = (t.instrument || "").toLowerCase();
+  if (t.price == null && o.entry && o.entry_src === "close" &&
+      (instr === "stock" || instr === "crypto")) {
+    return { value: o.entry,
+             tip: `Assumed entry — ${(t.symbol || "this") + " closed at $" + trimNum(o.entry)} on ${fmtDay(t.day)}. The message didn't state a price.` };
+  }
+  return null;
+}
+const trimNum = v => String(Number(v));
+function priceChip(t) {
+  if (t.price) return `<span class="pchip">@${esc(t.price)}</span>`;
+  const ap = assumedPrice(t);
+  if (ap) return `<span class="pchip assumed tipx" data-tip="${esc(ap.tip)}">@~${esc(trimNum(ap.value))}</span>`;
+  return "";
+}
+/* Data-quality flag: which fields a trade post is missing. Powers the
+   "incomplete" marker — the visible nudge to post better messages. An
+   assumed price counts as present; the ~ label carries the honesty. */
+function missingFields(t) {
+  const m = [];
+  if (!t.symbol) m.push("symbol");
+  const instr = (t.instrument || "").toLowerCase();
+  if (instr === "call" || instr === "put") {
+    if (t.strike == null) m.push("strike");
+    if (!t.expiry) m.push("expiry");
+    if (t.price == null) m.push("premium");
+  } else if (t.price == null && !assumedPrice(t)) {
+    m.push("price");
+  }
+  return m;
+}
+function incompleteChip(t) {
+  const miss = missingFields(t);
+  if (!miss.length) return "";
+  return `<span class="tipx incomplete" data-tip="Incomplete post — missing: ${esc(miss.join(", "))}.">incomplete</span>`;
 }
 function pctStr(x) { return (x >= 0 ? "+" : "") + (x * 100).toFixed(1) + "%"; }
 /* Outcome badge — reads t.outcome identically from static JSON or Supabase.
@@ -364,6 +406,8 @@ function renderTape(trades) {
           <span class="badge b-${t.action}">${t.action}</span>
           <span class="tsym">${esc(t.symbol || "—")}</span>
           <span class="tinst">${esc(instLabel(t))}</span>
+          ${priceChip(t)}
+          ${incompleteChip(t)}
           <span class="conf ${t.confidence}" title="${t.confidence} confidence"></span>
           ${outcomeBadge(t)}
           <span class="ttrader">${esc(t.trader)}</span>
