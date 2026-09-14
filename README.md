@@ -47,7 +47,7 @@ from the setup UI.
   instrument mix per anonymous member, with small-sample caveats.
 - **Insights engine** — deterministic rules surface activity spikes, crowd
   shifts, put/call sentiment changes, and hot traders. No LLM hallucinations.
-- **Privacy by design** — senders become `You` / `Trader 01…N`; raw message text,
+- **Privacy by design** — senders become `Trader 01…N`; raw message text,
   names, and phone numbers never leave your machine (see below).
 - **Self-hosted** — runs on a free Oracle Cloud ARM VM; your keys stay in a
   `0600` `.env` on your box.
