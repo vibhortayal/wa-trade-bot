@@ -288,10 +288,10 @@ function outcomeBadge(t) {
     ? `In the 5 trading days after the exit the price moved ${pctStr(o.ret)}${rt}.`
     : `Over the next 5 trading days the underlying moved ${pctStr(o.ret)}${rt}. Options are scored on the stock's direction, not the contract's profit.`;
   if (o.favorable === true)
-    return `<span class="tipx oc oc-good" data-tip="${esc(what)} ✓ = moved 1%+ in the trade's favor.">✓ ${pctStr(o.ret)}</span>`;
+    return `<span class="tipx oc oc-good" data-tip="${esc(what)}">✓ ${pctStr(o.ret)}</span>`;
   if (o.favorable === false)
-    return `<span class="tipx oc oc-bad" data-tip="${esc(what)} ✗ = moved 1%+ against the trade.">✗ ${pctStr(o.ret)}</span>`;
-  return `<span class="tipx oc oc-flat" data-tip="${esc(what)} – = stayed within 1% (flat).">${pctStr(o.ret)}</span>`;
+    return `<span class="tipx oc oc-bad" data-tip="${esc(what)}">✗ ${pctStr(o.ret)}</span>`;
+  return `<span class="tipx oc oc-flat" data-tip="${esc(what)}">${pctStr(o.ret)}</span>`;
 }
 function renderTape(trades) {
   const el = $("tape");
