@@ -68,6 +68,11 @@
   <div id="marketView">
   <section class="digest" id="digest"></section>
 
+  <section class="panel hidden" id="insightsPanel">
+    <h2>Insights <span class="tip" data-tip="Automatically spotted from the group's activity in this period: unusual spikes, new crowd plays, sentiment shifts, hot streaks. Observations about group behavior, not financial advice.">i</span> <span class="sub">what's unusual · group-wide</span></h2>
+    <div id="insights" class="insights"></div>
+  </section>
+
   <div class="grid">
     <section class="panel tape-panel">
       <div class="panel-head">
@@ -105,14 +110,14 @@
       <h2>Options lens <span class="tip" data-tip="When the options bets expire: within a month, 1–6 months, or LEAPS (more than 6 months out).">i</span></h2>
       <div id="optionsLens"></div>
     </section>
-    <section class="panel" id="plansPanel">
-      <h2>Plans watchlist <span class="tip" data-tip="“If X happens I'll trade Y” — conditional orders members announced in the last 14 days.">i</span> <span class="sub">conditional / planned orders</span></h2>
+    <section class="panel collapsible" id="plansPanel">
+      <h2 class="collapse-head" id="plansHead">Plans watchlist <span class="tip" data-tip="“If X happens I'll trade Y” — conditional orders members announced in the last 14 days.">i</span> <span class="sub" id="plansCount"></span> <span class="farrow" id="plansArrow">▾</span></h2>
       <div id="plans"></div>
     </section>
   </div>
 
-  <section class="panel">
-    <h2>Activity <span class="tip" data-tip="How many trade actions the chat produced each day. Darker = busier. Hover any square for the date.">i</span> <span class="sub">actions per day, last 60 days</span></h2>
+  <section class="panel collapsible" id="heatmapPanel">
+    <h2 class="collapse-head" id="heatmapHead">Activity <span class="tip" data-tip="How many trade actions the chat produced each day. Darker = busier. Hover any square for the date.">i</span> <span class="sub">actions per day, last 60 days</span> <span class="farrow" id="heatmapArrow">▾</span></h2>
     <div id="heatmap" class="heatmap"></div>
   </section>
   </div><!-- /marketView -->

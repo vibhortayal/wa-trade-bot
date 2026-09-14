@@ -1,5 +1,5 @@
 /* Trade Flow dashboard — vanilla JS, hand-rolled SVG */
-const state = { mode: "day", end: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, showFilters: false, tab: "market", traderSort: "active" };
+const state = { mode: "week", end: null, symbol: null, trader: null, instrument: null, action: null, obucket: null, ofav: null, showFilters: false, showPlans: false, showHeatmap: false, tab: "market", traderSort: "active" };
 let DATA = null;
 
 const ACTION_COLORS = {
@@ -88,6 +88,107 @@ function outcomeClass(t) {
 function rangeTrades() { return DATA.trades.filter(inRange); }
 function fmtDay(d) {
   return new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+/* ---------- insights: what's unusual in this period, plus what to do about it ----------
+   Rule-based, computed from the data — nothing invented. Each insight pairs an
+   observation with one actionable line. Panel hides when nothing fires. */
+function median(a) { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function periodTrades() { const days = new Set(windowDays()); return DATA.trades.filter(t => days.has(t.day)); }
+function daysBefore(startDay, n) {
+  const out = [], d = new Date(startDay + "T12:00:00");
+  for (let i = 1; i <= n; i++) { const t = new Date(d); t.setDate(t.getDate() - i); out.push(t.toISOString().slice(0, 10)); }
+  return out;
+}
+function buildInsights() {
+  const days = windowDays(), cur = periodTrades(), out = [];
+  if (!cur.length) return out;
+  const modeName = state.mode === "day" ? "day" : state.mode === "week" ? "week" : "month";
+  const baseDays = daysBefore(days[0], 30);
+  const agg = {};
+  baseDays.forEach(d => agg[d] = { n: 0, puts: 0, calls: 0, opts: 0 });
+  DATA.trades.forEach(t => { const a = agg[t.day]; if (!a) return; a.n++;
+    if (t.instrument === "put") a.puts++; if (t.instrument === "call") a.calls++;
+    if (["call", "put", "spread"].includes(t.instrument)) a.opts++; });
+  const prevDays = new Set(daysBefore(days[0], days.length));
+  const prev = DATA.trades.filter(t => prevDays.has(t.day));
+  const baseActive = baseDays.filter(d => agg[d].n > 0).length; // days with real history
+
+  // 1. activity spike / slump vs trailing median
+  const bMed = median(baseDays.map(d => agg[d].n));
+  const perAvg = cur.length / days.length;
+  if (baseActive >= 7 && bMed >= 2 && perAvg >= 2 * bMed)
+    out.push({ s: 3, t: "Busier than usual", d: `${perAvg.toFixed(1)} actions/day this ${modeName} vs ${bMed.toFixed(1)}/day usually.`, a: "Something's stirring — scan the tape for what's driving it." });
+  else if (baseActive >= 7 && bMed >= 3 && perAvg <= 0.4 * bMed)
+    out.push({ s: 3, t: "Quieter than usual", d: `${perAvg.toFixed(1)} actions/day this ${modeName} vs ${bMed.toFixed(1)}/day usually.`, a: "Thin chatter — don't over-read any single trade." });
+
+  // 2. new crowd play: 3+ traders on a symbol that wasn't a crowd play before
+  const cSym = {}, pSym = {};
+  cur.forEach(t => { if (t.symbol) (cSym[t.symbol] = cSym[t.symbol] || new Set()).add(t.trader); });
+  prev.forEach(t => { if (t.symbol) (pSym[t.symbol] = pSym[t.symbol] || new Set()).add(t.trader); });
+  const fresh = Object.entries(cSym)
+    .filter(([s, set]) => set.size >= 3 && !(pSym[s] && pSym[s].size >= 3))
+    .sort((a, b) => b[1].size - a[1].size)[0];
+  if (fresh)
+    out.push({ s: 5, t: `New crowd around ${fresh[0]}`, d: `${fresh[1].size} traders piled into ${fresh[0]} this ${modeName} — it wasn't a crowd play before.`, a: "Read the tape on it before the move plays out." });
+
+  // 3. sentiment shift: put/call vs trailing median
+  const puts = cur.filter(t => t.instrument === "put").length, calls = cur.filter(t => t.instrument === "call").length;
+  const pc = calls ? puts / calls : 0;
+  const bPC = median(baseDays.map(d => agg[d].calls ? agg[d].puts / agg[d].calls : null).filter(x => x !== null));
+  if (baseActive >= 7 && puts + calls >= 4 && pc > 1 && pc >= 1.5 * Math.max(bPC, 0.3))
+    out.push({ s: 4, t: "Group turned defensive", d: `${puts} puts vs ${calls} calls (ratio ${pc.toFixed(1)}) — usually ${bPC.toFixed(1)}.`, a: "The group is hedging. If you're long alongside them, check your own downside." });
+  else if (baseActive >= 7 && puts + calls >= 4 && pc < 1 && bPC > 0.7 && pc <= 0.6 * bPC)
+    out.push({ s: 4, t: "Group turned aggressive", d: `${calls} calls vs ${puts} puts (ratio ${pc.toFixed(1)}) — usually ${bPC.toFixed(1)}.`, a: "Downside bets dried up. Momentum is the mood — but crowded longs snap back." });
+
+  // 4. money flow flip vs prior window
+  const lean = cur.filter(t => OPEN.has(t.action)).length - cur.filter(t => CLOSE.has(t.action)).length;
+  const pLean = prev.filter(t => OPEN.has(t.action)).length - prev.filter(t => CLOSE.has(t.action)).length;
+  if (Math.abs(lean) >= 3 && Math.abs(pLean) >= 1 && Math.sign(lean) !== Math.sign(pLean))
+    out.push({ s: 4, t: lean > 0 ? "From distributing to accumulating" : "From accumulating to distributing",
+      d: `Net ${lean > 0 ? "+" : ""}${lean} opens-minus-closes this ${modeName}, was ${pLean > 0 ? "+" : ""}${pLean} before.`,
+      a: lean > 0 ? "Fresh money is going in — the group expects upside." : "The group is taking money off — consider why before adding risk." });
+
+  // 5. hot trader: best hit rate with 5+ scored
+  const bt = {};
+  cur.forEach(t => { const o = outcomeClass(t); if (!o) return; const b = bt[t.trader] = bt[t.trader] || { n: 0, fav: 0 }; b.n++; if (o === "fav") b.fav++; });
+  const hot = Object.entries(bt).filter(([, b]) => b.n >= 5)
+    .map(([tr, b]) => ({ tr, hr: b.fav / b.n, ...b })).sort((a, b) => b.hr - a.hr)[0];
+  if (hot && hot.hr >= 0.6) {
+    const you = hot.tr === "You";
+    out.push({ s: 4, t: you ? "You're running hot" : `${hot.tr} is running hot`,
+      d: `${hot.fav} of ${hot.n} scored trades favorable (${(hot.hr * 100).toFixed(0)}% hit rate).`,
+      a: you ? "Nice run — keep doing what's working." : `Their next idea deserves a closer look.${hot.n < 8 ? " Still a small sample — don't over-read it." : ""}` });
+  }
+
+  // 6. options share surge
+  const oShare = cur.filter(t => ["call", "put", "spread"].includes(t.instrument)).length / cur.length;
+  const bOS = median(baseDays.map(d => agg[d].n ? agg[d].opts / agg[d].n : null).filter(x => x !== null));
+  if (baseActive >= 7 && cur.length >= 8 && oShare >= 1.5 * Math.max(bOS, 0.1) && oShare - bOS >= 0.15)
+    out.push({ s: 3, t: "Leverage is up", d: `${(oShare * 100).toFixed(0)}% of actions are options vs ${(bOS * 100).toFixed(0)}% usually.`, a: "Bigger swings both ways — size accordingly if you follow." });
+
+  // 7. conditional orders waiting
+  const cutoff = daysBefore(days[days.length - 1], 14), cset = new Set(cutoff);
+  // ignore parse artifacts (plans whose note is a grounding complaint, not a real plan)
+  const plans = DATA.trades.filter(t => t.action === "PLAN" && cset.has(t.day))
+    .filter(t => t.symbol || !/^(Symbol|Missing)/i.test(t.note || ""));
+  if (plans.length) {
+    const p0 = plans[0], note = (p0.note || "").slice(0, 110);
+    out.push({ s: 2, t: `${plans.length} conditional order${plans.length > 1 ? "s" : ""} waiting`,
+      d: note ? `e.g. ${p0.symbol ? p0.symbol + " — " : ""}${note}${p0.note.length > 110 ? "…" : ""}` : [...new Set(plans.map(t => t.symbol).filter(Boolean))].slice(0, 4).join(", "),
+      a: "These are the exact levels the group is watching — expand Plans watchlist for the triggers." });
+  }
+
+  return out.sort((a, b) => b.s - a.s).slice(0, 4);
+}
+function renderInsights() {
+  const list = buildInsights();
+  $("insightsPanel").classList.toggle("hidden", !list.length);
+  if (!list.length) return;
+  $("insights").innerHTML = list.map(i => `
+    <div class="insight"><div class="it">${esc(i.t)}</div>
+      <div class="id">${esc(i.d)}</div>
+      <div class="ia"><span>→</span> ${esc(i.a)}</div></div>`).join("");
 }
 
 /* ---------- digest ---------- */
@@ -407,6 +508,10 @@ function renderPlans() {
     .sort((a, b) => b.ts - a.ts).slice(0, 8);
   $("plansPanel").classList.toggle("hidden", !plans.length);
   if (!plans.length) { $("plans").innerHTML = ""; return; }
+  $("plansCount").textContent = `${plans.length} waiting`;
+  $("plansArrow").innerHTML = state.showPlans ? "&#9652;" : "&#9662;";
+  $("plans").classList.toggle("hidden", !state.showPlans);
+  if (!state.showPlans) return;
   $("plans").innerHTML = plans.map(t => `
     <div class="plan-row tap " data-sym="${esc(t.symbol || "")}"><b>${esc(t.symbol || "—")}</b> <span class="tinst">${esc(instLabel(t))}</span>
       <div class="tnote">${esc(t.note)}</div>
@@ -421,6 +526,9 @@ function renderPlans() {
 
 /* ---------- heatmap ---------- */
 function renderHeatmap() {
+  $("heatmapArrow").innerHTML = state.showHeatmap ? "&#9652;" : "&#9662;";
+  $("heatmap").classList.toggle("hidden", !state.showHeatmap);
+  if (!state.showHeatmap) return;
   const counts = {};
   DATA.trades.forEach(t => { counts[t.day] = (counts[t.day] || 0) + 1; });
   const endD = new Date(state.end + "T12:00:00");
@@ -517,6 +625,7 @@ function render() {
   if (state.tab === "traders") { renderTraders(); return; }
   const trades = rangeTrades();
   renderDigest(trades);
+  renderInsights();
   renderTape(trades);
   renderSide(trades);
   renderClusters(trades);
@@ -579,6 +688,8 @@ async function init() {
   $("guideBtn").onclick = () => $("guide").classList.toggle("hidden");
   $("guideClose").onclick = () => $("guide").classList.add("hidden");
   $("filterToggle").onclick = () => { state.showFilters = !state.showFilters; render(); };
+  $("plansHead").onclick = e => { if (e.target.closest(".tip")) return; state.showPlans = !state.showPlans; render(); };
+  $("heatmapHead").onclick = e => { if (e.target.closest(".tip")) return; state.showHeatmap = !state.showHeatmap; render(); };
   // Tapping an ⓘ toggles its tooltip (touch devices have no hover)
   $("sheetX").onclick = closeSheet;
 $("sheetBackdrop").onclick = closeSheet;

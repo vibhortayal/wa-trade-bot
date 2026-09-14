@@ -123,6 +123,16 @@ main { max-width: 1180px; margin: 0 auto; padding: 18px 22px 40px; }
 .tape-filters.hidden { display: none; }
 .filter-toggle { margin: 2px 0 10px; }
 .filter-toggle .farrow { font-size: 10px; color: var(--muted); }
+/* insights: auto-spotted observations + one actionable line each */
+.insights { display: grid; gap: 10px; }
+.insight { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.insight .it { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+.insight .id { font-size: 13px; color: var(--text); margin-bottom: 3px; }
+.insight .ia { font-size: 13px; color: var(--muted); }
+.insight .ia span { color: var(--blue); font-weight: 700; }
+/* collapsible panels: tap the heading to expand */
+.collapse-head { cursor: pointer; user-select: none; }
+.collapse-head .farrow { font-size: 11px; color: var(--muted); margin-left: 2px; }
 .tfilter { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
 .tfilter select {
   background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
