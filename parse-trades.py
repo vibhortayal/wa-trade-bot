@@ -198,10 +198,20 @@ def call_llm(batch, tries=6):
         raise RuntimeError("llm failed: " + last_err)
     raise RuntimeError(f"llm failed after {tries} tries: " + (last_err or ""))
 
+def _write_parse_stats(new_messages, new_actions):
+    with open(f"{DATA}/parse-stats.json", "w") as f:
+        json.dump({
+            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "new_messages": new_messages,
+            "new_actions": new_actions,
+        }, f)
+
+
 def main():
     msgs_path = f"{DATA}/messages.jsonl"
     if not os.path.exists(msgs_path):
         print("no messages yet (nothing pulled), nothing to parse")
+        _write_parse_stats(0, 0)
         return
     msgs = [json.loads(l) for l in open(msgs_path) if l.strip()]
     # Pre-LLM anonymization: real sender names/IDs never leave the machine.
@@ -235,12 +245,16 @@ def main():
     done_ids = set()
     # resume from checkpoint if present
     ckpt_path = f"{DATA}/trades.json"
+    n_done_before = 0
+    n_trades_before = 0
     if os.path.exists(ckpt_path):
         try:
             prev = json.load(open(ckpt_path))
             if isinstance(prev, list) and prev and all("id" in r for r in prev):
                 results = prev
                 done_ids = {r["id"] for r in prev}
+                n_done_before = len(done_ids)
+                n_trades_before = sum(len(r.get("trades", [])) for r in prev)
                 print(f"  resuming: {len(done_ids)} already parsed", flush=True)
         except Exception:
             pass
@@ -289,6 +303,8 @@ def main():
     n_msgs = sum(1 for r in results if r.get("trades"))
     print(f"DONE: {n_trades} trade actions in {n_msgs} messages "
           f"({n_skipped} skipped by prefilter) -> {DATA}/trades.json")
+    # per-run stats for the dashboard health pill (via push-supabase -> wa_meta)
+    _write_parse_stats(len(done_ids) - n_done_before, n_trades - n_trades_before)
 
 if __name__ == "__main__":
     main()

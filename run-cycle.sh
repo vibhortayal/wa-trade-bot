@@ -32,18 +32,26 @@ fi
 
 echo "=== $(date -u +%FT%TZ) cycle start ==="
 GROUP_QUERY="${WA_GROUP_QUERY:-your group name}"
+# Report a failed stage to Supabase (wa_meta.last_cycle) so the dashboard
+# health pill names the broken step instead of just going quietly stale.
+# Never fails the cycle itself: a dead reporter must not mask the real error.
+report_failure() {
+  if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_KEY:-}" ]; then
+    python3 push-supabase.py --report-failure "$1" 2>&1 | tail -1 || true
+  fi
+}
 # Ingestion guardrail: MAX_MESSAGES_PER_CYCLE caps new messages per cycle
 # (default 200, ceiling 1000 enforced in read.js). .env is sourced above with
 # set -a, so the value is exported for read.js.
-node read.js "$GROUP_QUERY" --limit "${MAX_MESSAGES_PER_CYCLE:-200}" 2>&1 | tail -3 || { echo "READ FAILED"; exit 1; }
-python3 parse-trades.py 2>&1 | tail -2 || { echo "PARSE FAILED"; exit 1; }
+node read.js "$GROUP_QUERY" --limit "${MAX_MESSAGES_PER_CYCLE:-200}" 2>&1 | tail -3 || { echo "READ FAILED"; report_failure read; exit 1; }
+python3 parse-trades.py 2>&1 | tail -2 || { echo "PARSE FAILED"; report_failure parse; exit 1; }
 # Outcome scoring via the configured market-data provider
 # (MARKET_DATA_PROVIDER: tradingview, needs `tv` login via the setup UI;
 #  yahoo, free with no key). Non-fatal: a scoring failure still leaves fresh
 # parsed trades to push.
 python3 score-outcomes.py 2>&1 | tail -2 || echo "SCORE FAILED (continuing without fresh scores)"
 if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_KEY:-}" ]; then
-  python3 push-supabase.py 2>&1 | tail -3 || { echo "PUSH FAILED"; exit 1; }
+  python3 push-supabase.py 2>&1 | tail -3 || { echo "PUSH FAILED"; report_failure push; exit 1; }
 else
   echo "SUPABASE not configured, skipping push"
 fi

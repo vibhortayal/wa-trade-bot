@@ -71,6 +71,20 @@ main { max-width: 1180px; margin: 0 auto; padding: 18px 22px 40px; }
   border-radius: 8px; padding: 6px 8px; font: inherit; color-scheme: dark;
 }
 
+/* health pill: bot cycle status in the header */
+.health-pill {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 4px;
+  font-size: 12px; color: var(--muted); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 20px; padding: 3px 10px;
+}
+.health-pill .hdot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.health-ok .hdot { background: #26a69a; }
+.health-ok { color: var(--text); }
+.health-warn .hdot { background: #ffb300; }
+.health-warn { color: var(--text); }
+.health-err .hdot { background: #ef5350; }
+.health-err { color: var(--text); }
+
 .digest { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
 .stat {
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;

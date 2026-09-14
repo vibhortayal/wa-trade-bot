@@ -667,6 +667,7 @@ function render() {
   }
   $("prevBtn").disabled = isCustom || windowDays()[0] <= days[0];
   $("nextBtn").disabled = isCustom || state.end >= days[1];
+  renderHealth();
   document.querySelectorAll("#rangeSeg button").forEach(b =>
     b.classList.toggle("active", b.dataset.mode === state.mode));
   if (state.tab === "traders") { renderTraders(); return; }
@@ -724,17 +725,82 @@ async function loadData() {
         }));
         const days = [...new Set(trades.map(t => t.day))].sort();
         const meta = Object.fromEntries((me || []).map(m => [m.key, m.value]));
+        let lastCycle = null;
+        try { lastCycle = meta.last_cycle ? JSON.parse(meta.last_cycle) : null; } catch (e) {}
         return {
           generated: meta.last_push || "",
           day_range: [days[0], days[days.length - 1]],
           n_traders: new Set(trades.map(t => t.trader)).size,
           trades, live: true,
+          lastPush: meta.last_push || "", lastCycle,
         };
       }
     } catch (e) { console.warn("supabase unavailable, using static data:", e.message); }
   }
   const res = await fetch("data/trades.json");
-  return await res.json();
+  const fb = await res.json();
+  fb.live = false;
+  return fb;
+}
+
+/* ---------- health pill ---------- */
+function etMinutes() {
+  const p = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", hour: "numeric", minute: "numeric", hour12: false
+  }).formatToParts(new Date());
+  const h = (+p.find(x => x.type === "hour").value) % 24;
+  return h * 60 + (+p.find(x => x.type === "minute").value);
+}
+function fmtAge(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + "m ago";
+  const h = Math.round(m / 60);
+  if (h < 48) return h + "h ago";
+  return Math.round(h / 24) + "d ago";
+}
+function fmtCycleTime(iso) {
+  return new Date(iso).toLocaleString("en-US", {
+    timeZone: "America/New_York", month: "short", day: "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
+}
+function renderHealth() {
+  const pill = $("healthPill"), txt = $("healthText");
+  let cls = "health-idle", short = "checking…", tip = "";
+  const c = DATA.lastCycle || null;
+  if (!DATA.live) {
+    short = "local snapshot";
+    tip = "Showing baked-in data — the live feed is unreachable right now.";
+  } else if (c && c.status === "error") {
+    cls = "health-err";
+    short = "cycle failed";
+    tip = `Last cycle ${fmtCycleTime(c.ended_at)} ET failed at the ${c.step || "unknown"} step. ` +
+      "Check the setup UI logs on the server.";
+  } else if (DATA.lastPush) {
+    const age = Date.now() - new Date(DATA.lastPush).getTime();
+    const em = etMinutes();
+    // cycles expected hourly 08:30–17:00 ET plus the midnight run
+    const expected = em < 90 || (em >= 480 && em <= 1080);
+    short = fmtAge(age);
+    const bits = [];
+    if (c && c.status === "ok") {
+      const m = c.messages, a = c.new_actions;
+      bits.push(`${m == null ? "–" : m} new messages${a ? `, ${a} new trades` : ""}`);
+    }
+    tip = `Last successful cycle: ${fmtCycleTime(DATA.lastPush)} ET (${short}).` +
+      (bits.length ? ` That cycle: ${bits.join(" · ")}.` : "") +
+      " Cycles run hourly 8:30am–5pm ET plus a midnight run.";
+    if (age <= 100 * 60000) cls = "health-ok";
+    else if (expected) cls = "health-warn";
+    // outside expected hours an old push is normal -> stays neutral gray
+  } else {
+    short = "no cycles yet";
+    tip = "No successful cycle has pushed data yet.";
+  }
+  pill.className = "tipx health-pill " + cls;
+  txt.textContent = short;
+  pill.setAttribute("data-tip", tip);
 }
 
 async function init() {
