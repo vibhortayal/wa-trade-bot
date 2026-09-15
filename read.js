@@ -140,6 +140,14 @@ client.on('ready', async () => {
       const truncated = msgs.length >= scanCap && msgs.length > 0 && msgs[0].t >= sinceTs;
 
       const Contacts = W('WAWebCollections').Contact;
+      // Visible text of a message. Media messages carry it in `caption`;
+      // after a caption *edit*, WA Web leaves the thumbnail bytes in `body`,
+      // so prefer `caption` and never treat a base64 blob as message text.
+      const BLOB_RE = /^[A-Za-z0-9+/]{120,}={0,2}$/;
+      const visibleText = (o) => {
+        const t = ((o && (o.caption || o.body)) || '').trim();
+        return BLOB_RE.test(t) ? '' : t;
+      };
       const out = msgs.map((m) => {
         // capture quoted BEFORE serialize (serialize() consumes __x_ props on the raw model)
         let rawQuoted = null, rawQuotedParticipant = null;
@@ -150,7 +158,7 @@ client.on('ready', async () => {
             // __x_quotedMsg is already a plain data object (no .serialize())
             const qid = rawQuoted.id;
             quoted = { id: (qid && qid._serialized) || String(qid || ''),
-                       body: rawQuoted.body || rawQuoted.caption || '',
+                       body: visibleText(rawQuoted),
                        senderId: (rawQuoted.author && rawQuoted.author._serialized) || String(rawQuoted.author || '') ||
                                  (rawQuotedParticipant && rawQuotedParticipant._serialized) || null,
                        t: rawQuoted.t || null };
@@ -171,7 +179,7 @@ client.on('ready', async () => {
           fromMe: s.id && s.id.fromMe,
           authorId: s.author,
           senderId, senderName,
-          type: s.type, body: s.body || s.caption || '',
+          type: s.type, body: visibleText(s),
           hasMedia: !!s.hasMedia,
           quoted,
         };
