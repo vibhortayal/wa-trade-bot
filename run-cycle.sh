@@ -59,25 +59,30 @@ report_failure() {
 if systemctl is-active --quiet wa-trade-listener 2>/dev/null; then
   if [ -f data/listener-heartbeat.json ] && [ -z "$(find data/listener-heartbeat.json -mmin +10 2>/dev/null)" ]; then
     echo "[cycle] listener healthy"
+    python3 alert.py listener ok 2>&1 | tail -1
   else
     echo "[cycle] listener heartbeat stale, restarting service"
     sudo -n systemctl restart wa-trade-listener 2>&1 | tail -1 || echo "[cycle] WARNING: could not restart listener"
+    python3 alert.py listener failing "Trade Flow: listener restarted" "WhatsApp listener heartbeat was stale; restarted it. If this keeps happening, check the VM." 4 2>&1 | tail -1
     report_failure listener
   fi
 else
   echo "[cycle] listener not active, starting service"
   sudo -n systemctl start wa-trade-listener 2>&1 | tail -1 || echo "[cycle] WARNING: could not start listener"
+  python3 alert.py listener failing "Trade Flow: listener was down" "WhatsApp listener service wasn't active; tried to start it. If this keeps happening, check the VM." 4 2>&1 | tail -1
   report_failure listener
 fi
 
-python3 parse-trades.py 2>&1 | tail -2 || { echo "PARSE FAILED"; report_failure parse; exit 1; }
+python3 parse-trades.py 2>&1 | tail -2 || { echo "PARSE FAILED"; python3 alert.py parse failing "Trade Flow: parse failed" "Trade parsing failed this cycle — check logs/cycle.log on the VM." 4 2>&1 | tail -1; report_failure parse; exit 1; }
+python3 alert.py parse ok 2>&1 | tail -1
 # Outcome scoring via the configured market-data provider
 # (MARKET_DATA_PROVIDER: tradingview, needs `tv` login via the setup UI;
 #  yahoo, free with no key). Non-fatal: a scoring failure still leaves fresh
 # parsed trades to push.
 python3 score-outcomes.py 2>&1 | tail -2 || echo "SCORE FAILED (continuing without fresh scores)"
 if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_KEY:-}" ]; then
-  python3 push-supabase.py 2>&1 | tail -3 || { echo "PUSH FAILED"; report_failure push; exit 1; }
+  python3 push-supabase.py 2>&1 | tail -3 || { echo "PUSH FAILED"; python3 alert.py push failing "Trade Flow: push failed" "Pushing trades to Supabase failed — check logs/cycle.log on the VM." 4 2>&1 | tail -1; report_failure push; exit 1; }
+  python3 alert.py push ok 2>&1 | tail -1
 else
   echo "SUPABASE not configured, skipping push"
 fi

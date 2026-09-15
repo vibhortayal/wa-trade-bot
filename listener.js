@@ -295,6 +295,13 @@ function makeClient() {
   c.on('auth_failure', (m) => {
     console.error('[listener] AUTH FAILURE:', m, '-- re-pair via the setup UI, then restart the listener');
     heartbeat('auth_failure');
+    // This one needs a human: push an alert so it isn't found days later.
+    try {
+      const { execFileSync } = require('child_process');
+      execFileSync('python3', [path.join(__dirname, 'alert.py'), 'listener_auth', 'failing',
+        'Trade Flow: WhatsApp needs re-pairing',
+        'Linked-device auth failed. Re-pair in the setup UI, then restart the listener.'], { timeout: 15000 });
+    } catch (e) { /* best effort — alert failure must not mask the real error */ }
     intendedExit = 2;
     process.exit(2); // systemd StartLimitBurst stops the spin; human must re-pair
   });

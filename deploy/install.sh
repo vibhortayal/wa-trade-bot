@@ -67,6 +67,12 @@ fi
 if ! grep -q '^PUPPETEER_EXECUTABLE_PATH=' .env; then
   printf 'PUPPETEER_EXECUTABLE_PATH=%s\n' "$CHROME_BIN" >> .env
 fi
+# Give push alerts a private topic on fresh installs (empty/absent = disabled).
+if ! grep -q '^NTFY_TOPIC=.' .env; then
+  TOPIC="tradeflow-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  printf 'NTFY_TOPIC=%s\n' "$TOPIC" >> .env
+  echo "==> push alerts: subscribe to ntfy topic '$TOPIC' on your phone"
+fi
 
 echo "==> systemd units"
 for f in wa-trade-bot.service wa-trade-bot-cycle.service wa-trade-bot-cycle.timer wa-trade-listener.service; do
