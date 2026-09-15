@@ -10,7 +10,18 @@ const ensureProxy = require('./ensure-proxy');
 const DATA = path.join(__dirname, 'data');
 const MSG_FILE = path.join(DATA, 'messages.jsonl');
 const STATE_FILE = path.join(DATA, 'state.json');
+const HEARTBEAT_FILE = path.join(DATA, 'listener-heartbeat.json');
 fs.mkdirSync(DATA, { recursive: true });
+
+// Guard: the always-on listener (listener.js) owns the LocalAuth browser
+// profile. A one-shot read while it's active fails on the profile lock, so
+// refuse early with a clear message instead of a confusing Chromium error.
+let _hb = null;
+try { _hb = JSON.parse(fs.readFileSync(HEARTBEAT_FILE, 'utf8')); } catch (e) { /* none */ }
+if (_hb && _hb.status !== 'auth_failure' && (Date.now() / 1000 - (_hb.at_ts || 0)) < 300) {
+  console.error(`[read] refusing: the always-on listener is active (heartbeat ${Math.round(Date.now() / 1000 - _hb.at_ts)}s ago). Stop it first: sudo systemctl stop wa-trade-listener`);
+  process.exit(3);
+}
 
 // On Hatch the VM needs the local CONNECT forwarder for Chromium egress.
 // On a self-hosted box with direct internet, leave USE_PROXY unset.

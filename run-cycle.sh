@@ -1,5 +1,9 @@
 #!/bin/bash
-# Full hourly cycle for self-hosted operation: pull -> parse -> push to Supabase.
+# Full hourly cycle for self-hosted operation: parse -> score -> push to Supabase.
+# Message ingestion is handled by the always-on wa-trade-listener.service
+# (listener.js), which keeps a persistent WhatsApp connection — the old
+# connect→read→disconnect pattern got the linked device's sync paused.
+# This cycle checks the listener is healthy, then parses, scores, pushes.
 # Loads secrets from .env in this directory. Schedule: hourly 08:30-17:00
 # America/New_York (market hours +/- 1h buffer) plus a midnight ET catch-up run.
 # The gate is ET-based and does not depend on the VM clock timezone.
@@ -9,10 +13,12 @@ set -u
 set -o pipefail
 cd "$(dirname "$0")"
 
-# Browser for whatsapp-web.js: puppeteer's bundled Chrome may be missing/wrong-arch;
-# the system snap Chromium is the reliable fallback (UA is spoofed by wwebjs anyway).
-if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ] && [ -x /snap/bin/chromium ]; then
-  export PUPPETEER_EXECUTABLE_PATH=/snap/bin/chromium
+# Browser for whatsapp-web.js: puppeteer's bundled Chrome may be missing/wrong-arch.
+# Fall back to the snap Chromium REAL binary (not /snap/bin/chromium — the
+# snap launcher wrapper fails under systemd; the real binary always works).
+# UA is spoofed by wwebjs anyway, so the browser version doesn't matter.
+if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ] && [ -x /snap/chromium/current/usr/lib/chromium-browser/chrome ]; then
+  export PUPPETEER_EXECUTABLE_PATH=/snap/chromium/current/usr/lib/chromium-browser/chrome
 fi
 
 if [ -f .env ]; then
@@ -37,7 +43,6 @@ if [ "${MANUAL_RUN:-0}" != "1" ] && [ "$ALLOW" -eq 0 ]; then
 fi
 
 echo "=== $(date -u +%FT%TZ) cycle start ==="
-GROUP_QUERY="${WA_GROUP_QUERY:-your group name}"
 # Report a failed stage to Supabase (wa_meta.last_cycle) so the dashboard
 # health pill names the broken step instead of just going quietly stale.
 # Never fails the cycle itself: a dead reporter must not mask the real error.
@@ -46,10 +51,25 @@ report_failure() {
     python3 push-supabase.py --report-failure "$1" 2>&1 | tail -1 || true
   fi
 }
-# Ingestion guardrail: MAX_MESSAGES_PER_CYCLE caps new messages per cycle
-# (default 200, ceiling 1000 enforced in read.js). .env is sourced above with
-# set -a, so the value is exported for read.js.
-node read.js "$GROUP_QUERY" --limit "${MAX_MESSAGES_PER_CYCLE:-200}" 2>&1 | tail -3 || { echo "READ FAILED"; report_failure read; exit 1; }
+
+# Listener watchdog: the always-on listener owns the WhatsApp browser session.
+# If the service isn't active or its heartbeat is stale (>10 min), restart it.
+# The listener backfills on (re)connect, so nothing is lost. Non-fatal: parse
+# still runs on whatever's already ingested.
+if systemctl is-active --quiet wa-trade-listener 2>/dev/null; then
+  if [ -f data/listener-heartbeat.json ] && [ -z "$(find data/listener-heartbeat.json -mmin +10 2>/dev/null)" ]; then
+    echo "[cycle] listener healthy"
+  else
+    echo "[cycle] listener heartbeat stale, restarting service"
+    sudo -n systemctl restart wa-trade-listener 2>&1 | tail -1 || echo "[cycle] WARNING: could not restart listener"
+    report_failure listener
+  fi
+else
+  echo "[cycle] listener not active, starting service"
+  sudo -n systemctl start wa-trade-listener 2>&1 | tail -1 || echo "[cycle] WARNING: could not start listener"
+  report_failure listener
+fi
+
 python3 parse-trades.py 2>&1 | tail -2 || { echo "PARSE FAILED"; report_failure parse; exit 1; }
 # Outcome scoring via the configured market-data provider
 # (MARKET_DATA_PROVIDER: tradingview, needs `tv` login via the setup UI;

@@ -1,0 +1,22 @@
+[Unit]
+Description=Trade Flow persistent WhatsApp listener
+After=network-online.target
+Wants=network-online.target
+# Don't spin forever on repeated failures (e.g. auth failure needs re-pairing)
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+User=ubuntu
+Group=ubuntu
+Type=simple
+WorkingDirectory=%HOME%/wa-trade-bot
+# Source .env exactly like run-cycle.sh does, then exec node (replaces bash).
+ExecStart=/bin/bash -c 'set -a; . %HOME%/wa-trade-bot/.env; set +a; exec /usr/bin/node %HOME%/wa-trade-bot/listener.js'
+Restart=always
+RestartSec=30
+StandardOutput=append:%HOME%/wa-trade-bot/logs/listener.log
+StandardError=append:%HOME%/wa-trade-bot/logs/listener.log
+
+[Install]
+WantedBy=multi-user.target

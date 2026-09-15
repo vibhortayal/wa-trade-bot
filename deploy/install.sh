@@ -69,12 +69,17 @@ if ! grep -q '^PUPPETEER_EXECUTABLE_PATH=' .env; then
 fi
 
 echo "==> systemd units"
-for f in wa-trade-bot.service wa-trade-bot-cycle.service wa-trade-bot-cycle.timer; do
+for f in wa-trade-bot.service wa-trade-bot-cycle.service wa-trade-bot-cycle.timer wa-trade-listener.service; do
   sed "s|%HOME%|$HOME|g" "deploy/$f" | sudo tee "/etc/systemd/system/$f" >/dev/null
 done
 sudo systemctl daemon-reload
 sudo systemctl enable --now wa-trade-bot.service
 sudo systemctl enable --now wa-trade-bot-cycle.timer
+sudo systemctl enable --now wa-trade-listener.service
+# Let the hourly cycle (running as ubuntu) restart the listener if its
+# heartbeat goes stale — without this the watchdog in run-cycle.sh can't act.
+echo "ubuntu ALL=(ALL) NOPASSWD: /bin/systemctl start wa-trade-listener, /bin/systemctl stop wa-trade-listener, /bin/systemctl restart wa-trade-listener" | sudo tee /etc/sudoers.d/wa-trade-listener >/dev/null
+sudo chmod 440 /etc/sudoers.d/wa-trade-listener
 
 IP=$(curl -s --max-time 5 ifconfig.me || echo "<vm-public-ip>")
 echo

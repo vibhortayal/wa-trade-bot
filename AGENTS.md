@@ -11,9 +11,11 @@ non-obvious facts that cost real debugging time to learn.
    sender names, group IDs, Gemini/Supabase keys, the setup-UI password, or
    pairing codes. These are all gitignored — keep them that way. When debugging
    with message data, describe counts and shapes, never content.
-2. **The Oracle VM dir (`~/wa-trade-bot`) is not a git repo.** Deploy with
-   `scp`, never `git pull`. GitHub is the source of truth; the VM is a
-   deployment target.
+2. **Debug on the VM, ship via GitHub.** Iterate directly on the Oracle VM
+   (`~/wa-trade-bot`, a git repo tracking `origin/master`) when debugging —
+   it's fast. But once a fix is confirmed and tested, commit + push it
+   immediately; the repo must always end in sync. Never leave VM-only changes
+   sitting. (2026-09-15: converted from scp-deploys, which caused drift.)
 3. **Prove it working before calling it done.** Every fix gets a live
    verification on the VM (status endpoint, real pull, real cycle) — not just
    "code looks right."
@@ -25,13 +27,14 @@ non-obvious facts that cost real debugging time to learn.
 ssh -i ~/.ssh/id_ed25519 -o ProxyCommand='socat - PROXY:hatch-egress-proxy:%h:%p,proxyport=3128,proxyauth=$PROXY_CREDS' ubuntu@<vm-ip>
 
 systemctl status wa-trade-bot.service        # setup UI (:3001)
+systemctl status wa-trade-listener.service   # always-on WhatsApp listener
 systemctl status wa-trade-bot-cycle.timer    # hourly pipeline 08:30–17:00 ET + midnight ET
-journalctl -u wa-trade-bot.service --since -30m | tail -40
+journalctl -u wa-trade-listener --since -30m | tail -40
 
 # manual full cycle (bypasses the time gate, like the UI button does):
 MANUAL_RUN=1 bash ~/wa-trade-bot/run-cycle.sh
 
-# one-off pull sanity check:
+# one-off pull sanity check (refuses if the listener is active — stop it first):
 node read.js "your group name" --limit 3
 ```
 
@@ -42,6 +45,17 @@ production is https://wa-trade-flow.vercel.app.
 
 ## Architecture notes (read before touching the pipeline)
 
+- **Ingestion is always-on** (`listener.js`, `wa-trade-listener.service`).
+  The old hourly connect→read→disconnect pattern got the linked device's
+  message sync paused by WhatsApp (2026-09-15: 12h of missed messages). The
+  listener keeps one persistent browser session, backfills on (re)connect,
+  re-scans every 60s + on incoming group messages, and writes
+  `data/listener-heartbeat.json` every minute. It does one graceful restart
+  per day after 07:00 ET for a fresh Chromium. The hourly `run-cycle.sh`
+  never touches the browser — it only watchdogs the listener (restarts it if
+  the heartbeat is >10 min stale), then parses/scores/pushes. `read.js` is
+  kept for manual backfills but refuses to run while the listener heartbeat
+  is fresh (profile lock).
 - **Chromium on ARM has no puppeteer-bundled build.** We use the `chromium`
   snap. Critical: `PUPPETEER_EXECUTABLE_PATH` must point at the **real binary**
   `/snap/chromium/current/usr/lib/chromium-browser/chrome`, NOT the
@@ -86,12 +100,13 @@ production is https://wa-trade-flow.vercel.app.
 
 ## Deploy checklist
 
-1. `git commit` + `git push origin master` (your fork).
-2. `scp` changed files to `~/wa-trade-bot` on the VM (or re-run install for a
-   fresh box).
+1. `git commit` + `git push origin master`.
+2. On the VM: `git pull` in `~/wa-trade-bot`.
 3. `node --check` / `bash -n` / `python3 -c "import ast…"` the changed files.
-4. `sudo systemctl restart wa-trade-bot.service` if `server.js` changed.
-5. Verify live: `/api/status`, then a real pull or cycle — never assume.
+4. `sudo systemctl restart wa-trade-bot.service` if `server.js` changed;
+   `sudo systemctl restart wa-trade-listener` if `listener.js` changed.
+5. Verify live: `/api/status`, listener heartbeat fresh, then a real cycle —
+   never assume.
 
 ## Conventions
 

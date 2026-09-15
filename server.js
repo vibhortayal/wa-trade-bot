@@ -93,10 +93,10 @@ function waPaired() {
 }
 
 function killStrayBrowsers() {
-  // A leftover pairing/read Chromium holding the LocalAuth profile lock makes
+  // A leftover pairing/read/listener Chromium holding the LocalAuth profile lock makes
   // a fresh client.initialize() fail. Clear them before (re)pairing.
   // (Bracket trick: keeps pkill from matching its own command line.)
-  for (const pat of ['[w]webjs_auth', '[n]ode read.js']) {
+  for (const pat of ['[w]webjs_auth', '[n]ode read.js', '[n]ode listener.js']) {
     try { execSync(`pkill -f "${pat}" 2>/dev/null || true`); } catch {}
   }
 }
@@ -199,7 +199,7 @@ async function getStatus() {
     last_pull: lastPull,
     parsed_messages: trades.length,
     parsed_actions: actions,
-    ingestion, // { cap, fresh, ingested, deferred, capped, at } from last read.js run
+    ingestion, // { cap, fresh, ingested, deferred, capped, at } from last ingestion (listener.js steady-state)
     last_parse: fs.existsSync(tradesPath) ? fs.statSync(tradesPath).mtime.toISOString() : null,
     llm_configured: !!(process.env.LLM_API_BASE || process.env.GEMINI_API_KEY),
     supabase_configured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
