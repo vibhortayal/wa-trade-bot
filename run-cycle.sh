@@ -9,6 +9,12 @@ set -u
 set -o pipefail
 cd "$(dirname "$0")"
 
+# Browser for whatsapp-web.js: puppeteer's bundled Chrome may be missing/wrong-arch;
+# the system snap Chromium is the reliable fallback (UA is spoofed by wwebjs anyway).
+if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ] && [ -x /snap/bin/chromium ]; then
+  export PUPPETEER_EXECUTABLE_PATH=/snap/bin/chromium
+fi
+
 if [ -f .env ]; then
   set -a
   # shellcheck disable=SC1091
