@@ -52,6 +52,10 @@ from the setup UI.
   names, and phone numbers never leave your machine (see below).
 - **Self-hosted** — runs on a free Oracle Cloud ARM VM; your keys stay in a
   `0600` `.env` on your box.
+- **Push alerts** — failures (listener down, parse/push errors, WhatsApp
+  needing a re-pair) go straight to your phone via
+  [ntfy](https://ntfy.sh) — install the app and subscribe to the `NTFY_TOPIC`
+  in your `.env`. Alerts fire on state changes only, never with trade content.
 
 ## Swapping providers
 
@@ -177,6 +181,7 @@ parse-trades.py      Gemini extraction → data/trades.json
 score-outcomes.py    Market-data outcome scoring (5-day window, FIFO round trips)
 push-supabase.py     Anonymized upsert → Supabase wa_trades / wa_meta
 run-cycle.sh         Full pipeline: pull → parse → score → push
+alert.py             Push-notification alerts via ntfy (failures only, state-change dedup)
 build-dashboard.py   Bakes data/trades.json into the static dashboard
 dashboard/           Standalone dashboard source (deployed to Vercel)
 supabase/schema.sql  Tables + RLS (anon read-only)
